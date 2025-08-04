@@ -2,9 +2,13 @@
 
 use anyhow::anyhow;
 #[cfg(feature = "yaml")] use yaml_rust2::Yaml;
-use yaml_rust2::yaml::Hash;
-#[cfg(feature = "yaml")] use crate::yaml::{hash_require_string, type_name};
-use crate::yaml::{hash_lookup, hash_lookup_string};
+#[cfg(feature = "yaml")] use yaml_rust2::yaml::Hash;
+
+#[cfg(feature = "yaml")] use crate::yaml::{
+  hash_require_string,
+  type_name, hash_lookup,
+  hash_lookup_string
+};
 
 /// 4.6.1 Arazzo Description is the root object of the loaded specification.
 /// [Reference](https://spec.openapis.org/arazzo/latest.html#arazzo-description)
