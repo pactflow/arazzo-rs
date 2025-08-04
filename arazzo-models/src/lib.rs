@@ -1,14 +1,10 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! Rust models for the [Arazzo Open API specification](https://spec.openapis.org/arazzo/latest.html)
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+#[cfg(feature = "yaml")] pub mod yaml;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
+/// Arazzo Description is the root object of the loaded specification.
+/// [Reference](https://spec.openapis.org/arazzo/latest.html#arazzo-description)
+pub struct ArazzoDescription {
+  /// Version number of the Arazzo Specification
+  pub arazzo: String
 }
