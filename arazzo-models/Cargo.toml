@@ -2,5 +2,12 @@
 name = "arazzo-models"
 version = "0.0.0"
 edition = "2024"
+authors = ["Ronald Holshausen <ronald.holshausen@smartbear.com>"]
+description = "Rust models for the Arazzo Open API specification"
+homepage = "https://github.com/pactflow/arazzo-rs"
+repository = "https://github.com/pactflow/arazzo-rs"
+readme = "README.md"
+keywords = ["arazzo"]
+license = "Apache-2.0"
 
 [dependencies]
