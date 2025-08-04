@@ -48,3 +48,16 @@ pub fn hash_require_string(hash: &Hash, key: &str) -> anyhow::Result<String> {
     Err(anyhow!("Did not find key '{}' in hash", key))
   }
 }
+
+/// Looks up a String key in the given hash, calling the provided callback if it is found.
+pub fn hash_lookup<F, U>(
+  hash: &Hash,
+  key: &str,
+  callback: F
+) -> Option<U> where F: FnOnce(&Yaml) -> Option<U> {
+  if let Some(value) = hash.get(&Yaml::String(key.to_string())) {
+    callback(value)
+  } else {
+    None
+  }
+}

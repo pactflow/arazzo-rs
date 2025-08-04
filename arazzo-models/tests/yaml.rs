@@ -9,7 +9,7 @@ info:
   summary: This Arazzo Description showcases the workflow for how to purchase a pet through a sequence of API calls
   description: |
       This Arazzo Description walks you through the workflow and steps of `searching` for, `selecting`, and `purchasing` an available pet.
-  version: 1.0.1
+  version: 1.0.0
 sourceDescriptions:
 - name: petStoreDescription
   url: https://github.com/swagger-api/swagger-petstore/blob/master/src/main/resources/openapi.yaml
@@ -69,5 +69,12 @@ workflows:
 fn loads_the_main_spec_descriptors() {
   let yaml = YamlLoader::load_from_str(BASIC_SPEC_EXAMPLE).unwrap();
   let descriptor = ArazzoDescription::try_from(&yaml[0]).unwrap();
+
   expect!(descriptor.arazzo).to(be_equal_to("1.0.1"));
+
+  let info = &descriptor.info;
+  expect!(&info.title).to(be_equal_to("A pet purchasing workflow"));
+  expect!(info.summary.clone()).to(be_some());
+  expect!(info.description.clone()).to(be_some());
+  expect!(&info.version).to(be_equal_to("1.0.0"));
 }
