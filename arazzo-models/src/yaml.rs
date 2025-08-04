@@ -4,26 +4,6 @@ use anyhow::anyhow;
 use yaml_rust2::Yaml;
 use yaml_rust2::yaml::Hash;
 
-use crate::ArazzoDescription;
-
-impl TryFrom<&Yaml> for ArazzoDescription {
-  type Error = anyhow::Error;
-
-  fn try_from(value: &Yaml) -> Result<Self, Self::Error> {
-    if let Some(hash) = value.as_hash() {
-      if let Ok(version) = hash_require_string(hash, "arazzo") {
-        Ok(ArazzoDescription {
-          arazzo: version
-        })
-      } else {
-        Err(anyhow!("Arazzo version number is required [4.6.1.1 Fixed Fields]"))
-      }
-    } else {
-      Err(anyhow!("YAML document must be a Hash, got {}", type_name(value)))
-    }
-  }
-}
-
 /// Returns the type name of the YAML value
 pub fn type_name(yaml: &Yaml) -> String {
   match yaml {

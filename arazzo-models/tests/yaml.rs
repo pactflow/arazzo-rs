@@ -1,7 +1,7 @@
 use expectest::prelude::*;
 use yaml_rust2::YamlLoader;
 
-use arazzo_models::ArazzoDescription;
+use arazzo_models::v1_0::ArazzoDescription;
 
 const BASIC_SPEC_EXAMPLE: &str = r#"arazzo: 1.0.1
 info:
