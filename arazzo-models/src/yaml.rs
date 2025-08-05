@@ -36,6 +36,34 @@ pub fn yaml_hash_lookup_string(hash: &Hash, key: &str) -> Option<String> {
   }
 }
 
+/// Looks up a numeric value with the given String key in a YAML Hash. If the value is an integer
+/// it will be converted to a double.
+pub fn yaml_hash_lookup_number(hash: &Hash, key: &str) -> Option<f64> {
+  if let Some(value) = hash.get(&Yaml::String(key.to_string())) {
+    match value {
+      Yaml::Real(f) => f.parse::<f64>().ok(),
+      Yaml::Integer(i) => Some(*i as f64),
+      _ => None
+    }
+  } else {
+    None
+  }
+}
+
+/// Looks up an integer value with the given String key in a YAML Hash. If the value is a float
+/// it will be converted to an integer.
+pub fn yaml_hash_lookup_integer(hash: &Hash, key: &str) -> Option<i64> {
+  if let Some(value) = hash.get(&Yaml::String(key.to_string())) {
+    match value {
+      Yaml::Real(f) => f.parse::<f64>().ok().map(|f| f as i64),
+      Yaml::Integer(i) => Some(*i),
+      _ => None
+    }
+  } else {
+    None
+  }
+}
+
 /// Looks up a required String value with the given String key in a YAML Hash. If the key does
 /// not exist, or the resulting value is not a String, an Error is returned.
 pub fn yaml_hash_require_string(hash: &Hash, key: &str) -> anyhow::Result<String> {

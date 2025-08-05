@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 #[cfg(feature = "yaml")] use anyhow::anyhow;
+use itertools::Either;
 use serde_json::Value;
 #[cfg(feature = "yaml")] use yaml_rust2::Yaml;
 #[cfg(feature = "yaml")] use yaml_rust2::yaml::Hash;
@@ -17,6 +18,7 @@ use crate::extensions::ExtensionValue;
   yaml_hash_require_string,
   yaml_type_name
 };
+use crate::yaml::{yaml_hash_lookup_integer, yaml_hash_lookup_number};
 
 /// 4.6.1 Arazzo Description is the root object of the loaded specification.
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#arazzo-description)
@@ -167,6 +169,10 @@ pub struct Workflow {
   pub depends_on: Vec<String>,
   /// An ordered list of workflow steps
   pub steps: Vec<Step>,
+  /// List of success actions that are applicable for all steps described under this workflow.
+  pub success_actions: Vec<Either<SuccessObject, ReusableObject>>,
+  /// List of success actions that are applicable for all steps described under this workflow.
+  pub failure_actions: Vec<Either<FailureObject, ReusableObject>>,
   /// Extension values
   pub extensions: HashMap<String, ExtensionValue>
 }
@@ -203,6 +209,8 @@ impl TryFrom<&Yaml> for Workflow {
         inputs: yaml_hash_entry_to_json(&hash, "inputs")?,
         depends_on: yaml_hash_lookup_string_list(&hash, "dependsOn").unwrap_or_default(),
         steps: yaml_load_steps(hash)?,
+        success_actions: yaml_load_success_actions(hash)?,
+        failure_actions: yaml_load_failure_actions(hash)?,
         extensions: yaml_extract_extensions(&hash)?
       })
     } else {
@@ -253,6 +261,120 @@ impl TryFrom<&Yaml> for Step {
   }
 }
 
+#[cfg(feature = "yaml")]
+fn yaml_load_success_actions(hash: &Hash) -> anyhow::Result<Vec<Either<SuccessObject, ReusableObject>>> {
+  if let Some(array) = yaml_hash_lookup(hash, "successActions", |v | v.as_vec().cloned()) {
+    let mut list = vec![];
+
+    for item in &array {
+      if let Some(hash) = item.as_hash() {
+        if hash.contains_key(&Yaml::String("reference".to_string())) {
+          list.push(Either::Right(ReusableObject::try_from(hash)?));
+        } else {
+          list.push(Either::Left(SuccessObject::try_from(hash)?));
+        }
+      }
+    }
+
+    Ok(list)
+  } else {
+    Ok(vec![])
+  }
+}
+
+#[cfg(feature = "yaml")]
+fn yaml_load_failure_actions(hash: &Hash) -> anyhow::Result<Vec<Either<FailureObject, ReusableObject>>> {
+  if let Some(array) = yaml_hash_lookup(hash, "failureActions", |v | v.as_vec().cloned()) {
+    let mut list = vec![];
+
+    for item in &array {
+      if let Some(hash) = item.as_hash() {
+        if hash.contains_key(&Yaml::String("reference".to_string())) {
+          list.push(Either::Right(ReusableObject::try_from(hash)?));
+        } else {
+          list.push(Either::Left(FailureObject::try_from(hash)?));
+        }
+      }
+    }
+
+    Ok(list)
+  } else {
+    Ok(vec![])
+  }
+}
+
+/// 4.6.7 Success Action Object
+/// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#success-action-object)
+#[derive(Debug, Clone)]
+pub struct SuccessObject {
+  /// The name of the success action.
+  pub name: String,
+  /// The type of action to take.
+  pub r#type: String,
+  /// The workflowId referencing an existing workflow within the Arazzo Description to transfer to
+  /// upon success of the step.
+  pub workflow_id: Option<String>,
+  /// The stepId to transfer to upon success of the step.
+  pub step_id: Option<String>,
+  /// Extension values
+  pub extensions: HashMap<String, ExtensionValue>
+}
+
+#[cfg(feature = "yaml")]
+impl TryFrom<&Hash> for SuccessObject {
+  type Error = anyhow::Error;
+
+  fn try_from(value: &Hash) -> Result<Self, Self::Error> {
+    Ok(SuccessObject {
+      name: yaml_hash_require_string(value, "name")?,
+      r#type: yaml_hash_require_string(value, "type")?,
+      workflow_id: yaml_hash_lookup_string(value, "workflowId"),
+      step_id: yaml_hash_lookup_string(value, "stepId"),
+      extensions: yaml_extract_extensions(value)?
+    })
+  }
+}
+
+/// 4.6.8 Failure Action Object
+/// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#failure-action-object)
+#[derive(Debug, Clone)]
+pub struct FailureObject {
+  /// The name of the success action.
+  pub name: String,
+  /// The type of action to take.
+  pub r#type: String,
+  /// The workflowId referencing an existing workflow within the Arazzo Description to transfer to
+  /// upon success of the step.
+  pub workflow_id: Option<String>,
+  /// The stepId to transfer to upon success of the step.
+  pub step_id: Option<String>,
+  /// A non-negative decimal indicating the seconds to delay after the step failure before another
+  /// attempt shall be made.
+  pub retry_after: Option<f64>,
+  /// A non-negative integer indicating how many attempts to retry the step may be attempted before
+  /// failing the overall step.
+  pub retry_limit: Option<i64>,
+  /// Extension values
+  pub extensions: HashMap<String, ExtensionValue>
+}
+
+#[cfg(feature = "yaml")]
+impl TryFrom<&Hash> for FailureObject {
+  type Error = anyhow::Error;
+
+  fn try_from(value: &Hash) -> Result<Self, Self::Error> {
+    Ok(FailureObject {
+      name: yaml_hash_require_string(value, "name")?,
+      r#type: yaml_hash_require_string(value, "type")?,
+      workflow_id: yaml_hash_lookup_string(value, "workflowId"),
+      step_id: yaml_hash_lookup_string(value, "stepId"),
+      retry_after: yaml_hash_lookup_number(value, "retryAfter"),
+      retry_limit: yaml_hash_lookup_integer(value, "retryLimit"),
+      extensions: yaml_extract_extensions(value)?
+    })
+  }
+}
+
 /// 4.6.9 Components Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#components-object)
 #[derive(Debug, Clone, Default)]
@@ -276,6 +398,32 @@ impl TryFrom<&Hash> for Components {
   }
 }
 
+/// 4.6.10 Reusable Object
+/// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#reusable-object)
+#[derive(Debug, Clone)]
+pub struct ReusableObject {
+  /// Runtime Expression used to reference the desired object.
+  pub reference: String,
+  /// Sets a value of the referenced parameter.
+  pub value: Option<String>
+}
+
+#[cfg(feature = "yaml")]
+impl TryFrom<&Hash> for ReusableObject {
+  type Error = anyhow::Error;
+
+  fn try_from(value: &Hash) -> Result<Self, Self::Error> {
+    if let Ok(reference) = yaml_hash_require_string(value, "reference") {
+      Ok(ReusableObject {
+        reference,
+        value: yaml_hash_lookup_string(value, "value")
+      })
+    } else {
+      Err(anyhow!("Reference is required [4.6.10.1 Fixed Fields]"))
+    }
+  }
+}
+
 #[cfg(test)]
 #[cfg(feature = "yaml")]
 mod yaml_tests {
@@ -285,7 +433,7 @@ mod yaml_tests {
   use yaml_rust2::yaml::Hash;
 
   use crate::extensions::ExtensionValue;
-  use crate::v1_0::{ArazzoDescription, Components, Info, SourceDescription, Step, Workflow};
+  use crate::v1_0::*;
 
   #[test]
   fn fails_to_load_if_the_main_value_is_not_a_yaml_hash() {
@@ -479,5 +627,110 @@ mod yaml_tests {
       "one".to_string() => ExtensionValue::String("1".to_string()),
       "two".to_string() => ExtensionValue::Integer(2)
     }));
+  }
+
+  #[test]
+  fn load_success_object() {
+    let mut hash = Hash::new();
+    hash.insert(Yaml::String("name".to_string()), Yaml::String("test".to_string()));
+    hash.insert(Yaml::String("type".to_string()), Yaml::String("end".to_string()));
+    hash.insert(Yaml::String("workflowId".to_string()), Yaml::String("workflowId".to_string()));
+    hash.insert(Yaml::String("stepId".to_string()), Yaml::String("stepId".to_string()));
+
+    let success = SuccessObject::try_from(&hash).unwrap();
+    expect!(&success.name).to(be_equal_to("test"));
+    expect!(&success.r#type).to(be_equal_to("end"));
+    expect!(success.workflow_id.clone()).to(be_some().value("workflowId"));
+    expect!(success.step_id.clone()).to(be_some().value("stepId"));
+
+    let mut hash = Hash::new();
+    hash.insert(Yaml::String("name".to_string()), Yaml::String("test".to_string()));
+    hash.insert(Yaml::String("type".to_string()), Yaml::String("end".to_string()));
+
+    let success = SuccessObject::try_from(&hash).unwrap();
+    expect!(&success.name).to(be_equal_to("test"));
+    expect!(&success.r#type).to(be_equal_to("end"));
+    expect!(success.workflow_id.clone()).to(be_none());
+    expect!(success.step_id.clone()).to(be_none());
+  }
+
+  #[test]
+  fn success_object_supports_extensions() {
+    let mut hash = Hash::new();
+    hash.insert(Yaml::String("name".to_string()), Yaml::String("test".to_string()));
+    hash.insert(Yaml::String("type".to_string()), Yaml::String("end".to_string()));
+    hash.insert(Yaml::String("x-one".to_string()), Yaml::String("1".to_string()));
+    hash.insert(Yaml::String("x-two".to_string()), Yaml::Integer(2));
+
+    let success = SuccessObject::try_from(&hash).unwrap();
+    expect!(success.extensions).to(be_equal_to(hashmap!{
+      "one".to_string() => ExtensionValue::String("1".to_string()),
+      "two".to_string() => ExtensionValue::Integer(2)
+    }));
+  }
+
+  #[test]
+  fn load_failure_object() {
+    let mut hash = Hash::new();
+    hash.insert(Yaml::String("name".to_string()), Yaml::String("test".to_string()));
+    hash.insert(Yaml::String("type".to_string()), Yaml::String("end".to_string()));
+    hash.insert(Yaml::String("workflowId".to_string()), Yaml::String("workflowId".to_string()));
+    hash.insert(Yaml::String("stepId".to_string()), Yaml::String("stepId".to_string()));
+    hash.insert(Yaml::String("retryAfter".to_string()), Yaml::Real("10.5".to_string()));
+    hash.insert(Yaml::String("retryLimit".to_string()), Yaml::Integer(10));
+
+    let failure = FailureObject::try_from(&hash).unwrap();
+    expect!(&failure.name).to(be_equal_to("test"));
+    expect!(&failure.r#type).to(be_equal_to("end"));
+    expect!(failure.workflow_id.clone()).to(be_some().value("workflowId"));
+    expect!(failure.step_id.clone()).to(be_some().value("stepId"));
+    expect!(failure.retry_after.clone()).to(be_some().value(10.5));
+    expect!(failure.retry_limit.clone()).to(be_some().value(10));
+
+    let mut hash = Hash::new();
+    hash.insert(Yaml::String("name".to_string()), Yaml::String("test".to_string()));
+    hash.insert(Yaml::String("type".to_string()), Yaml::String("end".to_string()));
+
+    let failure = FailureObject::try_from(&hash).unwrap();
+    expect!(&failure.name).to(be_equal_to("test"));
+    expect!(&failure.r#type).to(be_equal_to("end"));
+    expect!(failure.workflow_id.clone()).to(be_none());
+    expect!(failure.step_id.clone()).to(be_none());
+    expect!(failure.retry_after.clone()).to(be_none());
+    expect!(failure.retry_limit.clone()).to(be_none());
+  }
+
+  #[test]
+  fn failure_object_supports_extensions() {
+    let mut hash = Hash::new();
+    hash.insert(Yaml::String("name".to_string()), Yaml::String("test".to_string()));
+    hash.insert(Yaml::String("type".to_string()), Yaml::String("end".to_string()));
+    hash.insert(Yaml::String("x-one".to_string()), Yaml::String("1".to_string()));
+    hash.insert(Yaml::String("x-two".to_string()), Yaml::Integer(2));
+
+    let failure = FailureObject::try_from(&hash).unwrap();
+    expect!(failure.extensions).to(be_equal_to(hashmap!{
+      "one".to_string() => ExtensionValue::String("1".to_string()),
+      "two".to_string() => ExtensionValue::Integer(2)
+    }));
+  }
+
+  #[test]
+  fn load_reusable_object() {
+    let mut hash = Hash::new();
+    hash.insert(Yaml::String("reference".to_string()), Yaml::String("$test".to_string()));
+    hash.insert(Yaml::String("value".to_string()), Yaml::String("test".to_string()));
+    hash.insert(Yaml::String("workflowId".to_string()), Yaml::String("workflowId".to_string()));
+
+    let obj = ReusableObject::try_from(&hash).unwrap();
+    expect!(&obj.reference).to(be_equal_to("$test"));
+    expect!(obj.value.clone()).to(be_some().value("test"));
+
+    let mut hash = Hash::new();
+    hash.insert(Yaml::String("reference".to_string()), Yaml::String("$test".to_string()));
+
+    let obj = ReusableObject::try_from(&hash).unwrap();
+    expect!(&obj.reference).to(be_equal_to("$test"));
+    expect!(obj.value.clone()).to(be_none());
   }
 }

@@ -106,4 +106,7 @@ fn loads_the_main_spec_descriptors() {
       }
     }
   })));
+
+  let steps = &workflow.steps;
+  expect!(steps.len()).to(be_equal_to(2));
 }
