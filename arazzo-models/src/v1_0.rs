@@ -13,12 +13,13 @@ use crate::extensions::ExtensionValue;
 #[cfg(feature = "yaml")] use crate::yaml::{
   yaml_hash_entry_to_json,
   yaml_hash_lookup,
+  yaml_hash_lookup_integer,
+  yaml_hash_lookup_number,
   yaml_hash_lookup_string,
   yaml_hash_lookup_string_list,
   yaml_hash_require_string,
   yaml_type_name
 };
-use crate::yaml::{yaml_hash_lookup_integer, yaml_hash_lookup_number};
 
 /// 4.6.1 Arazzo Description is the root object of the loaded specification.
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#arazzo-description)
