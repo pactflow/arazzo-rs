@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use anyhow::anyhow;
+#[cfg(feature = "yaml")] use anyhow::anyhow;
 use serde_json::Value;
 #[cfg(feature = "yaml")] use yaml_rust2::Yaml;
 #[cfg(feature = "yaml")] use yaml_rust2::yaml::Hash;
@@ -10,13 +10,13 @@ use serde_json::Value;
 use crate::extensions::ExtensionValue;
 #[cfg(feature = "yaml")] use crate::extensions::yaml_extract_extensions;
 #[cfg(feature = "yaml")] use crate::yaml::{
+  yaml_hash_entry_to_json,
   yaml_hash_lookup,
   yaml_hash_lookup_string,
   yaml_hash_lookup_string_list,
   yaml_hash_require_string,
   yaml_type_name
 };
-use crate::yaml::yaml_hash_entry_to_json;
 
 /// 4.6.1 Arazzo Description is the root object of the loaded specification.
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#arazzo-description)
