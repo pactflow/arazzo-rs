@@ -86,4 +86,12 @@ fn loads_the_main_spec_descriptors() {
   expect!(&source.name).to(be_equal_to("petStoreDescription"));
   expect!(&source.url).to(be_equal_to("https://github.com/swagger-api/swagger-petstore/blob/master/src/main/resources/openapi.yaml"));
   expect!(source.r#type.clone()).to(be_some().value("openapi"));
+
+  let workflows = &descriptor.workflows;
+  expect!(workflows.is_empty()).to(be_false());
+  let workflow = &workflows[0];
+  expect!(&workflow.workflow_id).to(be_equal_to("loginUserAndRetrievePet"));
+  expect!(workflow.summary.clone()).to(be_some().value("Login User and then retrieve pets"));
+  expect!(workflow.description.clone()).to(be_some().value("This workflow lays out the steps to login a user and then retrieve pets"));
+  expect!(workflow.depends_on.is_empty()).to(be_true());
 }

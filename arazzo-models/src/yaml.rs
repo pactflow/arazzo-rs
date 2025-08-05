@@ -61,3 +61,26 @@ pub fn hash_lookup<F, U>(
     None
   }
 }
+
+/// Looks up an Array of String values with the given String key in a YAML Hash. If each value
+/// is easily convertable to a String (is a Number or Boolean), `to_string()` will be called on it.
+/// All other values are ignored.
+pub fn hash_lookup_string_list(hash: &Hash, key: &str) -> Option<Vec<String>> {
+  if let Some(value) = hash.get(&Yaml::String(key.to_string())) {
+    if let Some(array) = value.as_vec() {
+      Some(array.iter().flat_map(|value| {
+        match value {
+          Yaml::Real(s) => Some(s.clone()),
+          Yaml::Integer(i) => Some(i.to_string()),
+          Yaml::String(s) => Some(s.clone()),
+          Yaml::Boolean(b) => Some(b.to_string()),
+          _ => None
+        }
+      }).collect())
+    } else {
+      None
+    }
+  } else {
+    None
+  }
+}
