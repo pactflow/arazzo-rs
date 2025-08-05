@@ -6,7 +6,7 @@ use std::collections::HashMap;
 #[cfg(feature = "yaml")] use maplit::hashmap;
 #[cfg(feature = "yaml")] use yaml_rust2::Yaml;
 #[cfg(feature = "yaml")] use yaml_rust2::yaml::Hash;
-#[cfg(feature = "yaml")] use crate::yaml::type_name;
+#[cfg(feature = "yaml")] use crate::yaml::yaml_type_name;
 
 /// Enum to store a value of additional data
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -64,7 +64,7 @@ impl TryFrom<&Yaml> for ExtensionValue {
         for (k, value) in h {
           let key = k.as_str()
             .ok_or_else(|| {
-              anyhow!("Only String values can be used for extension keys. Got '{}'", type_name(k))
+              anyhow!("Only String values can be used for extension keys. Got '{}'", yaml_type_name(k))
             })?;
           map.insert(key.to_string(), value.try_into()?);
         }
@@ -72,7 +72,7 @@ impl TryFrom<&Yaml> for ExtensionValue {
         Ok(ExtensionValue::Object(map))
       }
       Yaml::Null => Ok(ExtensionValue::Null),
-      _ => Err(anyhow!("Values of '{}' can not be used as an extension value", type_name(value)))
+      _ => Err(anyhow!("Values of '{}' can not be used as an extension value", yaml_type_name(value)))
     }
   }
 }

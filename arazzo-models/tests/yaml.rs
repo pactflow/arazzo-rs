@@ -1,4 +1,5 @@
 use expectest::prelude::*;
+use serde_json::json;
 use yaml_rust2::YamlLoader;
 
 use arazzo_models::v1_0::ArazzoDescription;
@@ -94,4 +95,15 @@ fn loads_the_main_spec_descriptors() {
   expect!(workflow.summary.clone()).to(be_some().value("Login User and then retrieve pets"));
   expect!(workflow.description.clone()).to(be_some().value("This workflow lays out the steps to login a user and then retrieve pets"));
   expect!(workflow.depends_on.is_empty()).to(be_true());
+  expect!(&workflow.inputs).to(be_equal_to(&json!({
+    "type": "object",
+    "properties": {
+      "username": {
+        "type": "string"
+      },
+      "password": {
+        "type": "string"
+      }
+    }
+  })));
 }
