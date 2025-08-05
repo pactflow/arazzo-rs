@@ -1,23 +1,29 @@
-//! Version 1.0.x specification models
+//! Version 1.0.x specification models (https://spec.openapis.org/arazzo/v1.0.1.html)
+
+use std::collections::HashMap;
 
 use anyhow::anyhow;
 #[cfg(feature = "yaml")] use yaml_rust2::Yaml;
 #[cfg(feature = "yaml")] use yaml_rust2::yaml::Hash;
 
+use crate::extensions::ExtensionValue;
+#[cfg(feature = "yaml")] use crate::extensions::extract_extensions_from_yaml;
 #[cfg(feature = "yaml")] use crate::yaml::{
-  hash_require_string,
-  type_name, hash_lookup,
-  hash_lookup_string
+  hash_lookup,
+  hash_lookup_string, hash_require_string,
+  type_name
 };
 
 /// 4.6.1 Arazzo Description is the root object of the loaded specification.
-/// [Reference](https://spec.openapis.org/arazzo/latest.html#arazzo-description)
+/// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#arazzo-description)
 #[derive(Debug, Clone)]
 pub struct ArazzoDescription {
   /// Version number of the Arazzo Specification
   pub arazzo: String,
   /// Metadata about API workflows defined in the Arazzo document
-  pub info: Info
+  pub info: Info,
+  /// Extension values
+  pub extensions: HashMap<String, ExtensionValue>
 }
 
 #[cfg(feature = "yaml")]
@@ -30,7 +36,8 @@ impl TryFrom<&Yaml> for ArazzoDescription {
         let info = Info::try_from(hash)?;
         Ok(ArazzoDescription {
           arazzo: version,
-          info
+          info,
+          extensions: extract_extensions_from_yaml(&hash)?
         })
       } else {
         Err(anyhow!("Arazzo version number is required [4.6.1.1 Fixed Fields]"))
@@ -42,17 +49,19 @@ impl TryFrom<&Yaml> for ArazzoDescription {
 }
 
 /// 4.6.2 Info Object
-/// [Reference](https://spec.openapis.org/arazzo/latest.html#info-object)
+/// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#info-object)
 #[derive(Debug, Clone)]
 pub struct Info {
-  /// A human readable title of the Arazzo Description.
+  /// A human-readable title of the Arazzo Description.
   pub title: String,
   /// A short summary of the Arazzo Description.
   pub summary: Option<String>,
   /// A description of the purpose of the workflows defined.
   pub description: Option<String>,
   /// Document version
-  pub version: String
+  pub version: String,
+  /// Extension values
+  pub extensions: HashMap<String, ExtensionValue>
 }
 
 #[cfg(feature = "yaml")]
@@ -65,7 +74,8 @@ impl TryFrom<&Hash> for Info {
         title: hash_require_string(&hash, "title")?,
         summary: hash_lookup_string(&hash, "summary"),
         description: hash_lookup_string(&hash, "description"),
-        version: hash_require_string(&hash, "version")?
+        version: hash_require_string(&hash, "version")?,
+        extensions: extract_extensions_from_yaml(&hash)?
       })
     } else {
       Err(anyhow!("Info Object is required [4.6.1.1 Fixed Fields]"))
@@ -75,11 +85,13 @@ impl TryFrom<&Hash> for Info {
 
 #[cfg(test)]
 mod tests {
-  use expectest::expect;
-  use expectest::prelude::be_err;
-  use yaml_rust2::Yaml;
-  use yaml_rust2::yaml::Hash;
-  use crate::v1_0::ArazzoDescription;
+  use expectest::prelude::*;
+  use maplit::hashmap;
+  #[cfg(feature = "yaml")] use yaml_rust2::Yaml;
+  #[cfg(feature = "yaml")] use yaml_rust2::yaml::Hash;
+
+  use crate::extensions::ExtensionValue;
+  use crate::v1_0::{ArazzoDescription, Info};
 
   #[test]
   #[cfg(feature = "yaml")]
@@ -107,5 +119,43 @@ mod tests {
     let mut hash = Hash::new();
     hash.insert(Yaml::String("arazzo".to_string()), Yaml::String("1.0.0".to_string()));
     expect!(ArazzoDescription::try_from(&Yaml::Hash(hash))).to(be_err());
+  }
+
+  #[test]
+  #[cfg(feature = "yaml")]
+  fn arazzo_description_supports_extensions() {
+    let mut hash = Hash::new();
+    hash.insert(Yaml::String("arazzo".to_string()), Yaml::String("1.0.0".to_string()));
+    hash.insert(Yaml::String("x-one".to_string()), Yaml::String("1".to_string()));
+    hash.insert(Yaml::String("x-two".to_string()), Yaml::Integer(2));
+
+    let mut info = Hash::new();
+    info.insert(Yaml::String("title".to_string()), Yaml::String("test".to_string()));
+    info.insert(Yaml::String("version".to_string()), Yaml::String("1.0.0".to_string()));
+    hash.insert(Yaml::String("info".to_string()), Yaml::Hash(info));
+
+    let desc = ArazzoDescription::try_from(&Yaml::Hash(hash)).unwrap();
+    expect!(desc.extensions).to(be_equal_to(hashmap!{
+      "one".to_string() => ExtensionValue::String("1".to_string()),
+      "two".to_string() => ExtensionValue::Integer(2)
+    }));
+  }
+
+  #[test]
+  #[cfg(feature = "yaml")]
+  fn info_supports_extensions() {
+    let mut hash = Hash::new();
+    hash.insert(Yaml::String("title".to_string()), Yaml::String("test".to_string()));
+    hash.insert(Yaml::String("version".to_string()), Yaml::String("1.0.0".to_string()));
+    hash.insert(Yaml::String("x-one".to_string()), Yaml::String("1".to_string()));
+    hash.insert(Yaml::String("x-two".to_string()), Yaml::Integer(2));
+
+    let mut outer = Hash::new();
+    outer.insert(Yaml::String("info".to_string()), Yaml::Hash(hash));
+    let info = Info::try_from(&outer).unwrap();
+    expect!(info.extensions).to(be_equal_to(hashmap!{
+      "one".to_string() => ExtensionValue::String("1".to_string()),
+      "two".to_string() => ExtensionValue::Integer(2)
+    }));
   }
 }
