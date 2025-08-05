@@ -7,7 +7,7 @@ use anyhow::anyhow;
 #[cfg(feature = "yaml")] use yaml_rust2::yaml::Hash;
 
 use crate::extensions::ExtensionValue;
-#[cfg(feature = "yaml")] use crate::extensions::extract_extensions_from_yaml;
+#[cfg(feature = "yaml")] use crate::extensions::yaml_extract_extensions;
 #[cfg(feature = "yaml")] use crate::yaml::{
   hash_lookup,
   hash_lookup_string, hash_require_string,
@@ -22,8 +22,10 @@ pub struct ArazzoDescription {
   pub arazzo: String,
   /// Metadata about API workflows defined in the Arazzo document
   pub info: Info,
+  /// List of source descriptions
+  pub source_descriptions: Vec<SourceDescription>,
   /// Extension values
-  pub extensions: HashMap<String, ExtensionValue>
+  pub extensions: HashMap<String, ExtensionValue>,
 }
 
 #[cfg(feature = "yaml")]
@@ -34,16 +36,19 @@ impl TryFrom<&Yaml> for ArazzoDescription {
     if let Some(hash) = value.as_hash() {
       if let Ok(version) = hash_require_string(hash, "arazzo") {
         let info = Info::try_from(hash)?;
+        let source_descriptions = yaml_load_source_descriptions(hash)?;
+
         Ok(ArazzoDescription {
           arazzo: version,
           info,
-          extensions: extract_extensions_from_yaml(&hash)?
+          source_descriptions,
+          extensions: yaml_extract_extensions(&hash)?
         })
       } else {
         Err(anyhow!("Arazzo version number is required [4.6.1.1 Fixed Fields]"))
       }
     } else {
-      Err(anyhow!("YAML document must be a Hash, got {}", type_name(value)))
+      Err(anyhow!("YAML value must be a Hash, got {}", type_name(value)))
     }
   }
 }
@@ -75,7 +80,7 @@ impl TryFrom<&Hash> for Info {
         summary: hash_lookup_string(&hash, "summary"),
         description: hash_lookup_string(&hash, "description"),
         version: hash_require_string(&hash, "version")?,
-        extensions: extract_extensions_from_yaml(&hash)?
+        extensions: yaml_extract_extensions(&hash)?
       })
     } else {
       Err(anyhow!("Info Object is required [4.6.1.1 Fixed Fields]"))
@@ -83,30 +88,79 @@ impl TryFrom<&Hash> for Info {
   }
 }
 
+/// 4.6.3 Source Description Object
+/// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#source-description-object)
+#[derive(Debug, Clone)]
+pub struct SourceDescription {
+  /// Unique name for the source description.
+  pub name: String,
+  /// URL to a source description to be used by a workflow.
+  pub url: String,
+  /// The type of source description.
+  pub r#type: Option<String>,
+  /// Extension values
+  pub extensions: HashMap<String, ExtensionValue>
+}
+
+#[cfg(feature = "yaml")]
+fn yaml_load_source_descriptions(hash: &Hash) -> anyhow::Result<Vec<SourceDescription>> {
+  if let Some(array) = hash_lookup(hash, "sourceDescriptions", | v | v.as_vec().cloned()) {
+    if array.is_empty() {
+      Err(anyhow!("Source Description list must have at least one entry [4.6.1.1 Fixed Fields]"))
+    } else {
+      let mut list = vec![];
+
+      for item in &array {
+        list.push(SourceDescription::try_from(item)?);
+      }
+
+      Ok(list)
+    }
+  } else {
+    Err(anyhow!("Source Description Object is required [4.6.1.1 Fixed Fields]"))
+  }
+}
+
+#[cfg(feature = "yaml")]
+impl TryFrom<&Yaml> for SourceDescription {
+  type Error = anyhow::Error;
+
+  fn try_from(value: &Yaml) -> Result<Self, Self::Error> {
+    if let Some(hash) = value.as_hash() {
+      Ok(SourceDescription {
+        name: hash_require_string(&hash, "name")?,
+        url: hash_require_string(&hash, "url")?,
+        r#type: hash_lookup_string(&hash, "type"),
+        extensions: yaml_extract_extensions(&hash)?
+      })
+    } else {
+      Err(anyhow!("YAML value must be a Hash, got {}", type_name(value)))
+    }
+  }
+}
+
 #[cfg(test)]
-mod tests {
+#[cfg(feature = "yaml")]
+mod yaml_tests {
   use expectest::prelude::*;
   use maplit::hashmap;
-  #[cfg(feature = "yaml")] use yaml_rust2::Yaml;
-  #[cfg(feature = "yaml")] use yaml_rust2::yaml::Hash;
+  use yaml_rust2::Yaml;
+  use yaml_rust2::yaml::Hash;
 
   use crate::extensions::ExtensionValue;
-  use crate::v1_0::{ArazzoDescription, Info};
+  use crate::v1_0::{ArazzoDescription, Info, SourceDescription};
 
   #[test]
-  #[cfg(feature = "yaml")]
   fn fails_to_load_if_the_main_value_is_not_a_yaml_hash() {
     expect!(ArazzoDescription::try_from(&Yaml::String("test".to_string()))).to(be_err());
   }
 
   #[test]
-  #[cfg(feature = "yaml")]
   fn fails_to_load_if_the_version_is_missing() {
     expect!(ArazzoDescription::try_from(&Yaml::Hash(Hash::new()))).to(be_err());
   }
 
   #[test]
-  #[cfg(feature = "yaml")]
   fn fails_to_load_if_the_version_is_not_a_string() {
     let mut hash = Hash::new();
     hash.insert(Yaml::String("arazzo".to_string()), Yaml::Hash(Hash::new()));
@@ -114,7 +168,6 @@ mod tests {
   }
 
   #[test]
-  #[cfg(feature = "yaml")]
   fn fails_to_load_if_the_info_is_missing() {
     let mut hash = Hash::new();
     hash.insert(Yaml::String("arazzo".to_string()), Yaml::String("1.0.0".to_string()));
@@ -122,17 +175,31 @@ mod tests {
   }
 
   #[test]
-  #[cfg(feature = "yaml")]
+  fn fails_to_load_if_the_source_description_is_missing() {
+    let mut hash = Hash::new();
+    hash.insert(Yaml::String("arazzo".to_string()), Yaml::String("1.0.0".to_string()));
+    hash.insert(Yaml::String("info".to_string()), Yaml::Hash(info_fixture()));
+    expect!(ArazzoDescription::try_from(&Yaml::Hash(hash))).to(be_err());
+  }
+
+  #[test]
+  fn fails_to_load_if_the_source_description_is_empty() {
+    let mut hash = Hash::new();
+    hash.insert(Yaml::String("arazzo".to_string()), Yaml::String("1.0.0".to_string()));
+    hash.insert(Yaml::String("info".to_string()), Yaml::Hash(info_fixture()));
+    hash.insert(Yaml::String("sourceDescriptions".to_string()), Yaml::Array(vec![]));
+    expect!(ArazzoDescription::try_from(&Yaml::Hash(hash))).to(be_err());
+  }
+
+  #[test]
   fn arazzo_description_supports_extensions() {
     let mut hash = Hash::new();
     hash.insert(Yaml::String("arazzo".to_string()), Yaml::String("1.0.0".to_string()));
     hash.insert(Yaml::String("x-one".to_string()), Yaml::String("1".to_string()));
     hash.insert(Yaml::String("x-two".to_string()), Yaml::Integer(2));
 
-    let mut info = Hash::new();
-    info.insert(Yaml::String("title".to_string()), Yaml::String("test".to_string()));
-    info.insert(Yaml::String("version".to_string()), Yaml::String("1.0.0".to_string()));
-    hash.insert(Yaml::String("info".to_string()), Yaml::Hash(info));
+    hash.insert(Yaml::String("info".to_string()), Yaml::Hash(info_fixture()));
+    hash.insert(Yaml::String("sourceDescriptions".to_string()), Yaml::Array(source_descriptions_fixture()));
 
     let desc = ArazzoDescription::try_from(&Yaml::Hash(hash)).unwrap();
     expect!(desc.extensions).to(be_equal_to(hashmap!{
@@ -141,8 +208,21 @@ mod tests {
     }));
   }
 
+  fn info_fixture() -> Hash {
+    let mut info = Hash::new();
+    info.insert(Yaml::String("title".to_string()), Yaml::String("test".to_string()));
+    info.insert(Yaml::String("version".to_string()), Yaml::String("1.0.0".to_string()));
+    info
+  }
+
+  fn source_descriptions_fixture() -> Vec<Yaml> {
+    let mut desc = Hash::new();
+    desc.insert(Yaml::String("name".to_string()), Yaml::String("test".to_string()));
+    desc.insert(Yaml::String("url".to_string()), Yaml::String("http://test".to_string()));
+    vec![Yaml::Hash(desc)]
+  }
+
   #[test]
-  #[cfg(feature = "yaml")]
   fn info_supports_extensions() {
     let mut hash = Hash::new();
     hash.insert(Yaml::String("title".to_string()), Yaml::String("test".to_string()));
@@ -154,6 +234,21 @@ mod tests {
     outer.insert(Yaml::String("info".to_string()), Yaml::Hash(hash));
     let info = Info::try_from(&outer).unwrap();
     expect!(info.extensions).to(be_equal_to(hashmap!{
+      "one".to_string() => ExtensionValue::String("1".to_string()),
+      "two".to_string() => ExtensionValue::Integer(2)
+    }));
+  }
+
+  #[test]
+  fn source_description_supports_extensions() {
+    let mut hash = Hash::new();
+    hash.insert(Yaml::String("name".to_string()), Yaml::String("test".to_string()));
+    hash.insert(Yaml::String("url".to_string()), Yaml::String("test".to_string()));
+    hash.insert(Yaml::String("x-one".to_string()), Yaml::String("1".to_string()));
+    hash.insert(Yaml::String("x-two".to_string()), Yaml::Integer(2));
+
+    let desc = SourceDescription::try_from(&Yaml::Hash(hash)).unwrap();
+    expect!(desc.extensions).to(be_equal_to(hashmap!{
       "one".to_string() => ExtensionValue::String("1".to_string()),
       "two".to_string() => ExtensionValue::Integer(2)
     }));

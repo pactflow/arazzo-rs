@@ -79,7 +79,7 @@ impl TryFrom<&Yaml> for ExtensionValue {
 
 /// Extracts all the extension values from the Hash, stripping the `x-` suffix off.
 #[cfg(feature = "yaml")]
-pub fn extract_extensions_from_yaml(hash: &Hash) -> anyhow::Result<HashMap<String, ExtensionValue>> {
+pub fn yaml_extract_extensions(hash: &Hash) -> anyhow::Result<HashMap<String, ExtensionValue>> {
   let mut extensions = hashmap!{};
 
   for (k, v) in hash {

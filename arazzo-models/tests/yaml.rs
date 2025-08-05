@@ -74,7 +74,16 @@ fn loads_the_main_spec_descriptors() {
 
   let info = &descriptor.info;
   expect!(&info.title).to(be_equal_to("A pet purchasing workflow"));
-  expect!(info.summary.clone()).to(be_some());
-  expect!(info.description.clone()).to(be_some());
+  expect!(info.summary.clone()).to(be_some().value(
+    "This Arazzo Description showcases the workflow for how to purchase a pet through a sequence of API calls"));
+  expect!(info.description.clone()).to(be_some().value(
+    "This Arazzo Description walks you through the workflow and steps of `searching` for, `selecting`, and `purchasing` an available pet.\n"));
   expect!(&info.version).to(be_equal_to("1.0.0"));
+
+  let sources = &descriptor.source_descriptions;
+  expect!(sources.is_empty()).to(be_false());
+  let source = &sources[0];
+  expect!(&source.name).to(be_equal_to("petStoreDescription"));
+  expect!(&source.url).to(be_equal_to("https://github.com/swagger-api/swagger-petstore/blob/master/src/main/resources/openapi.yaml"));
+  expect!(source.r#type.clone()).to(be_some().value("openapi"));
 }
