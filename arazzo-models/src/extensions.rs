@@ -2,10 +2,10 @@
 
 use std::collections::HashMap;
 
-use anyhow::anyhow;
-use maplit::hashmap;
+#[cfg(feature = "yaml")] use anyhow::anyhow;
+#[cfg(feature = "yaml")] use maplit::hashmap;
 #[cfg(feature = "yaml")] use yaml_rust2::Yaml;
-use yaml_rust2::yaml::Hash;
+#[cfg(feature = "yaml")] use yaml_rust2::yaml::Hash;
 #[cfg(feature = "yaml")] use crate::yaml::type_name;
 
 /// Enum to store a value of additional data
