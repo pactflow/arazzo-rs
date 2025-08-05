@@ -28,6 +28,8 @@ pub struct ArazzoDescription {
   pub source_descriptions: Vec<SourceDescription>,
   /// List of workflows
   pub workflows: Vec<Workflow>,
+  /// An element to hold shared schemas.
+  pub components: Components,
   /// Extension values
   pub extensions: HashMap<String, ExtensionValue>,
 }
@@ -42,12 +44,14 @@ impl TryFrom<&Yaml> for ArazzoDescription {
         let info = Info::try_from(hash)?;
         let source_descriptions = yaml_load_source_descriptions(hash)?;
         let workflows = yaml_load_workflows(hash)?;
+        let components = Components::try_from(hash)?;
 
         Ok(ArazzoDescription {
           arazzo: version,
           info,
           source_descriptions,
           workflows,
+          components,
           extensions: yaml_extract_extensions(&hash)?
         })
       } else {
@@ -199,6 +203,29 @@ impl TryFrom<&Yaml> for Workflow {
   }
 }
 
+/// 4.6.9 Components Object
+/// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#components-object)
+#[derive(Debug, Clone, Default)]
+pub struct Components {
+  /// Extension values
+  pub extensions: HashMap<String, ExtensionValue>
+}
+
+#[cfg(feature = "yaml")]
+impl TryFrom<&Hash> for Components {
+  type Error = anyhow::Error;
+
+  fn try_from(value: &Hash) -> Result<Self, Self::Error> {
+    if let Some(hash) = hash_lookup(value, "components", | v | v.as_hash().cloned()) {
+      Ok(Components {
+        extensions: yaml_extract_extensions(&hash)?
+      })
+    } else {
+      Ok(Components::default())
+    }
+  }
+}
+
 #[cfg(test)]
 #[cfg(feature = "yaml")]
 mod yaml_tests {
@@ -208,7 +235,7 @@ mod yaml_tests {
   use yaml_rust2::yaml::Hash;
 
   use crate::extensions::ExtensionValue;
-  use crate::v1_0::{ArazzoDescription, Info, SourceDescription, Workflow};
+  use crate::v1_0::{ArazzoDescription, Components, Info, SourceDescription, Workflow};
 
   #[test]
   fn fails_to_load_if_the_main_value_is_not_a_yaml_hash() {
@@ -349,6 +376,23 @@ mod yaml_tests {
 
     let wf = Workflow::try_from(&Yaml::Hash(hash)).unwrap();
     expect!(wf.extensions).to(be_equal_to(hashmap!{
+      "one".to_string() => ExtensionValue::String("1".to_string()),
+      "two".to_string() => ExtensionValue::Integer(2)
+    }));
+  }
+
+  #[test]
+  fn components_supports_extensions() {
+    let mut hash = Hash::new();
+    hash.insert(Yaml::String("workflowId".to_string()), Yaml::String("test".to_string()));
+    hash.insert(Yaml::String("x-one".to_string()), Yaml::String("1".to_string()));
+    hash.insert(Yaml::String("x-two".to_string()), Yaml::Integer(2));
+
+    let mut outer = Hash::new();
+    outer.insert(Yaml::String("components".to_string()), Yaml::Hash(hash));
+
+    let components = Components::try_from(&outer).unwrap();
+    expect!(components.extensions).to(be_equal_to(hashmap!{
       "one".to_string() => ExtensionValue::String("1".to_string()),
       "two".to_string() => ExtensionValue::Integer(2)
     }));
