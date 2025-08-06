@@ -249,6 +249,8 @@ pub struct Step {
   pub parameters: Vec<Either<ParameterObject, ReusableObject>>,
   /// Request body to pass to an operation as referenced by operationId or operationPath.
   pub request_body: Option<RequestBody>,
+  /// List of assertions to determine the success of the step.
+  pub success_criteria: Vec<Criterion>,
   /// Array of success action objects that specify what to do upon step success.
   pub on_success: Vec<Either<SuccessObject, ReusableObject>>,
   /// Array of failure action objects that specify what to do upon step failure.
@@ -294,6 +296,7 @@ impl TryFrom<&Yaml> for Step {
         request_body: yaml_hash_lookup(hash, "requestBody", |v| Some(RequestBody::try_from(v)))
           .transpose()?,
         on_success: yaml_load_success_actions(hash)?,
+        success_criteria: yaml_load_success_criteria(hash)?,
         on_failure: yaml_load_failure_actions(hash)?,
         outputs: yaml_load_outputs(hash),
         extensions: yaml_extract_extensions(&hash)?
@@ -430,6 +433,21 @@ fn yaml_load_outputs(hash: &Hash) -> HashMap<String, String> {
   }).unwrap_or_default()
 }
 
+#[cfg(feature = "yaml")]
+fn yaml_load_success_criteria(hash: &Hash) -> anyhow::Result<Vec<Criterion>> {
+  if let Some(criteria) = yaml_hash_lookup(hash, "successCriteria", |v | v.as_vec().cloned()) {
+    let mut result = vec![];
+
+    for value in &criteria {
+      result.push(Criterion::try_from(value)?);
+    }
+
+    Ok(result)
+  } else {
+    Ok(vec![])
+  }
+}
+
 /// 4.6.7 Success Action Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#success-action-object)
 #[derive(Debug, Clone, PartialEq)]
@@ -549,6 +567,78 @@ impl TryFrom<&Hash> for ReusableObject {
       Err(anyhow!("Reference is required [4.6.10.1 Fixed Fields]"))
     }
   }
+}
+
+/// 4.6.11 Criterion Object
+/// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#criterion-object)
+#[derive(Debug, Clone, PartialEq)]
+pub struct Criterion {
+  /// Runtime Expression used to set the context for the condition to be applied on.
+  pub context: Option<String>,
+  /// The condition to apply.
+  pub condition: String,
+  /// The type of condition to be applied.
+  pub r#type: Option<Either<String, CriterionExpressionType>>,
+  /// Extension values
+  pub extensions: HashMap<String, AnyValue>
+}
+
+#[cfg(feature = "yaml")]
+impl TryFrom<&Yaml> for Criterion {
+  type Error = anyhow::Error;
+
+  fn try_from(value: &Yaml) -> Result<Self, Self::Error> {
+    if let Some(hash) = value.as_hash() {
+      Ok(Criterion {
+        context: yaml_hash_lookup_string(hash, "context"),
+        condition: yaml_hash_require_string(hash, "condition")?,
+        r#type: yaml_load_criterion_expression_type(hash)?,
+        extensions: yaml_extract_extensions(hash)?
+      })
+    } else {
+      Err(anyhow!("YAML value must be a Hash, got {}", yaml_type_name(value)))
+    }
+  }
+}
+
+/// 4.6.12 Criterion Expression Type Object
+/// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#criterion-expression-type-object)
+#[derive(Debug, Clone, PartialEq)]
+pub struct CriterionExpressionType {
+  /// The type of condition to be applied.
+  pub r#type: String,
+  /// A shorthand string representing the version of the expression type being used.
+  pub version: String,
+  /// Extension values
+  pub extensions: HashMap<String, AnyValue>
+}
+
+#[cfg(feature = "yaml")]
+impl TryFrom<&Yaml> for CriterionExpressionType {
+  type Error = anyhow::Error;
+
+  fn try_from(value: &Yaml) -> Result<Self, Self::Error> {
+    if let Some(hash) = value.as_hash() {
+      Ok(CriterionExpressionType {
+        r#type: yaml_hash_require_string(hash, "type")?,
+        version: yaml_hash_require_string(hash, "version")?,
+        extensions: yaml_extract_extensions(hash)?
+      })
+    } else {
+      Err(anyhow!("YAML value must be a Hash, got {}", yaml_type_name(value)))
+    }
+  }
+}
+
+#[cfg(feature = "yaml")]
+fn yaml_load_criterion_expression_type(hash: &Hash) -> anyhow::Result<Option<Either<String, CriterionExpressionType>>> {
+  yaml_hash_lookup(hash, "type", |value | {
+    if let Some(s) = value.as_str() {
+      Some(Ok(Either::Left(s.to_string())))
+    } else {
+      Some(CriterionExpressionType::try_from(value).map(Either::Right))
+    }
+  }).transpose()
 }
 
 /// 4.6.13 Request Body Object
@@ -1201,5 +1291,66 @@ mod yaml_tests {
       }),
       &p.0
     );
+  }
+
+  #[test]
+  fn load_criterion() {
+    let mut hash = Hash::new();
+    hash.insert(Yaml::String("condition".to_string()), Yaml::String("$statusCode == 200".to_string()));
+
+    let criterion = Criterion::try_from(&Yaml::Hash(hash)).unwrap();
+    expect!(criterion.condition).to(be_equal_to("$statusCode == 200"));
+    expect!(criterion.context).to(be_none());
+    expect!(criterion.r#type).to(be_none());
+
+    let mut hash = Hash::new();
+    hash.insert(Yaml::String("context".to_string()), Yaml::String("$statusCode".to_string()));
+    hash.insert(Yaml::String("condition".to_string()), Yaml::String("^200$".to_string()));
+    hash.insert(Yaml::String("type".to_string()), Yaml::String("regex".to_string()));
+
+    let criterion = Criterion::try_from(&Yaml::Hash(hash)).unwrap();
+    expect!(criterion.condition).to(be_equal_to("^200$"));
+    expect!(criterion.context).to(be_some().value("$statusCode"));
+    expect!(criterion.r#type).to(be_some().value(Either::Left("regex".to_string())));
+  }
+
+  #[test]
+  fn criterion_supports_extensions() {
+    let mut hash = Hash::new();
+    hash.insert(Yaml::String("condition".to_string()), Yaml::String("$statusCode == 200".to_string()));
+    hash.insert(Yaml::String("x-one".to_string()), Yaml::String("1".to_string()));
+    hash.insert(Yaml::String("x-two".to_string()), Yaml::Integer(2));
+
+    let criterion = Criterion::try_from(&Yaml::Hash(hash)).unwrap();
+    expect!(criterion.extensions).to(be_equal_to(hashmap!{
+      "one".to_string() => AnyValue::String("1".to_string()),
+      "two".to_string() => AnyValue::Integer(2)
+    }));
+  }
+
+  #[test]
+  fn load_criterion_expression_type() {
+    let mut hash = Hash::new();
+    hash.insert(Yaml::String("type".to_string()), Yaml::String("jsonpath".to_string()));
+    hash.insert(Yaml::String("version".to_string()), Yaml::String("draft-goessner-dispatch-jsonpath-00".to_string()));
+
+    let criterion = CriterionExpressionType::try_from(&Yaml::Hash(hash)).unwrap();
+    expect!(criterion.r#type).to(be_equal_to("jsonpath"));
+    expect!(criterion.version).to(be_equal_to("draft-goessner-dispatch-jsonpath-00"));
+  }
+
+  #[test]
+  fn criterion_expression_type_supports_extensions() {
+    let mut hash = Hash::new();
+    hash.insert(Yaml::String("type".to_string()), Yaml::String("jsonpath".to_string()));
+    hash.insert(Yaml::String("version".to_string()), Yaml::String("draft-goessner-dispatch-jsonpath-00".to_string()));
+    hash.insert(Yaml::String("x-one".to_string()), Yaml::String("1".to_string()));
+    hash.insert(Yaml::String("x-two".to_string()), Yaml::Integer(2));
+
+    let criterion = CriterionExpressionType::try_from(&Yaml::Hash(hash)).unwrap();
+    expect!(criterion.extensions).to(be_equal_to(hashmap!{
+      "one".to_string() => AnyValue::String("1".to_string()),
+      "two".to_string() => AnyValue::Integer(2)
+    }));
   }
 }

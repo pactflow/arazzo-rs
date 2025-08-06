@@ -4,7 +4,7 @@ use maplit::hashmap;
 use serde_json::json;
 use yaml_rust2::YamlLoader;
 use arazzo_models::extensions::AnyValue;
-use arazzo_models::v1_0::{ArazzoDescription, ParameterObject};
+use arazzo_models::v1_0::{ArazzoDescription, Criterion, ParameterObject};
 
 const BASIC_SPEC_EXAMPLE: &str = r#"arazzo: 1.0.1
 info:
@@ -140,6 +140,14 @@ fn loads_the_main_spec_descriptors() {
     "tokenExpires".to_string() => "$response.header.X-Expires-After".to_string(),
     "rateLimit".to_string() => "$response.header.X-Rate-Limit".to_string()
   }));
+  expect!(step1.success_criteria.clone()).to(be_equal_to(vec![
+    Criterion {
+      context: None,
+      condition: "$statusCode == 200".to_string(),
+      r#type: None,
+      extensions: Default::default()
+    }
+  ]));
 
   let step2 = steps[1].clone();
   expect!(step2.step_id).to(be_equal_to("getPetStep"));
@@ -164,4 +172,12 @@ fn loads_the_main_spec_descriptors() {
   expect!(step2.outputs.clone()).to(be_equal_to(hashmap!{
     "availablePets".to_string() => "$response.body".to_string()
   }));
+  expect!(step2.success_criteria.clone()).to(be_equal_to(vec![
+    Criterion {
+      context: None,
+      condition: "$statusCode == 200".to_string(),
+      r#type: None,
+      extensions: Default::default()
+    }
+  ]));
 }
