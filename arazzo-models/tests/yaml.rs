@@ -1,9 +1,10 @@
 use expectest::prelude::*;
+use itertools::Either;
 use maplit::hashmap;
 use serde_json::json;
 use yaml_rust2::YamlLoader;
-
-use arazzo_models::v1_0::ArazzoDescription;
+use arazzo_models::extensions::AnyValue;
+use arazzo_models::v1_0::{ArazzoDescription, ParameterObject};
 
 const BASIC_SPEC_EXAMPLE: &str = r#"arazzo: 1.0.1
 info:
@@ -120,6 +121,20 @@ fn loads_the_main_spec_descriptors() {
   expect!(step1.operation_id).to(be_some().value("loginUser"));
   expect!(step1.operation_path).to(be_none());
   expect!(step1.workflow_id).to(be_none());
+  expect!(step1.parameters).to(be_equal_to(vec![
+    Either::Left(ParameterObject {
+      name: "username".to_string(),
+      r#in: Some("query".to_string()),
+      value: Either::Right("$inputs.username".to_string()),
+      extensions: Default::default()
+    }),
+    Either::Left(ParameterObject {
+      name: "password".to_string(),
+      r#in: Some("query".to_string()),
+      value: Either::Right("$inputs.password".to_string()),
+      extensions: Default::default()
+    })
+  ]));
 
   let step2 = steps[1].clone();
   expect!(step2.step_id).to(be_equal_to("getPetStep"));
@@ -127,4 +142,18 @@ fn loads_the_main_spec_descriptors() {
   expect!(step2.operation_id).to(be_none());
   expect!(step2.operation_path).to(be_some().value("{$sourceDescriptions.petstoreDescription.url}#/paths/~1pet~1findByStatus/get"));
   expect!(step2.workflow_id).to(be_none());
+  expect!(step2.parameters).to(be_equal_to(vec![
+    Either::Left(ParameterObject {
+      name: "status".to_string(),
+      r#in: Some("query".to_string()),
+      value: Either::Left(AnyValue::String("available".to_string())),
+      extensions: Default::default()
+    }),
+    Either::Left(ParameterObject {
+      name: "Authorization".to_string(),
+      r#in: Some("header".to_string()),
+      value: Either::Right("$steps.loginUser.outputs.sessionToken".to_string()),
+      extensions: Default::default()
+    })
+  ]));
 }

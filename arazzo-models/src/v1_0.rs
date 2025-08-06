@@ -241,6 +241,9 @@ pub struct Step {
   pub workflow_id: Option<String>,
   /// Description of the step.
   pub description: Option<String>,
+  /// List of parameters that must be passed to an operation or workflow as referenced by
+  /// operationId, operationPath, or workflowId.
+  pub parameters: Vec<Either<ParameterObject, ReusableObject>>,
   /// Extension values
   pub extensions: HashMap<String, AnyValue>
 }
@@ -276,6 +279,7 @@ impl TryFrom<&Yaml> for Step {
         operation_path: yaml_hash_lookup_string(&hash, "operationPath"),
         workflow_id: yaml_hash_lookup_string(&hash, "workflowId"),
         description: yaml_hash_lookup_string(&hash, "description"),
+        parameters: yaml_load_parameters(hash)?,
         extensions: yaml_extract_extensions(&hash)?
       })
     } else {
@@ -908,5 +912,27 @@ mod yaml_tests {
       "one".to_string() => AnyValue::String("1".to_string()),
       "two".to_string() => AnyValue::Integer(2)
     }));
+  }
+
+  #[test]
+  fn load_step_parameters() {
+    let mut parameter = Hash::new();
+    parameter.insert(Yaml::String("name".to_string()), Yaml::String("username".to_string()));
+    parameter.insert(Yaml::String("in".to_string()), Yaml::String("query".to_string()));
+    parameter.insert(Yaml::String("value".to_string()), Yaml::String("$inputs.username".to_string()));
+
+    let mut hash = Hash::new();
+    hash.insert(Yaml::String("stepId".to_string()), Yaml::String("test".to_string()));
+    hash.insert(Yaml::String("parameters".to_string()), Yaml::Array(vec![Yaml::Hash(parameter)]));
+
+    let step = Step::try_from(&Yaml::Hash(hash)).unwrap();
+    expect!(step.parameters).to(be_equal_to(vec![
+      Either::Left(ParameterObject {
+        name: "username".to_string(),
+        r#in: Some("query".to_string()),
+        value: Either::Right("$inputs.username".to_string()),
+        extensions: Default::default()
+      })
+    ]));
   }
 }
