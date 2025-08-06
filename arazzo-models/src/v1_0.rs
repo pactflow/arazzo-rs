@@ -1,15 +1,17 @@
 //! Version 1.0.x specification models (https://spec.openapis.org/arazzo/v1.0.1.html)
 
 use std::collections::HashMap;
+use std::rc::Rc;
 
 #[cfg(feature = "yaml")] use anyhow::anyhow;
 use itertools::Either;
 use serde_json::Value;
-#[cfg(feature = "yaml")] use yaml_rust2::Yaml;
 #[cfg(feature = "yaml")] use yaml_rust2::yaml::Hash;
+#[cfg(feature = "yaml")] use yaml_rust2::Yaml;
 
-use crate::extensions::AnyValue;
 #[cfg(feature = "yaml")] use crate::extensions::yaml_extract_extensions;
+use crate::extensions::AnyValue;
+use crate::payloads::{EmptyPayload, JsonPayload, Payload, StringPayload};
 #[cfg(feature = "yaml")] use crate::yaml::{
   yaml_hash_entry_to_json,
   yaml_hash_lookup,
@@ -18,6 +20,7 @@ use crate::extensions::AnyValue;
   yaml_hash_lookup_string,
   yaml_hash_lookup_string_list,
   yaml_hash_require_string,
+  yaml_to_json,
   yaml_type_name
 };
 
@@ -244,6 +247,8 @@ pub struct Step {
   /// List of parameters that must be passed to an operation or workflow as referenced by
   /// operationId, operationPath, or workflowId.
   pub parameters: Vec<Either<ParameterObject, ReusableObject>>,
+  /// Request body to pass to an operation as referenced by operationId or operationPath.
+  pub request_body: Option<RequestBody>,
   /// Extension values
   pub extensions: HashMap<String, AnyValue>
 }
@@ -280,6 +285,8 @@ impl TryFrom<&Yaml> for Step {
         workflow_id: yaml_hash_lookup_string(&hash, "workflowId"),
         description: yaml_hash_lookup_string(&hash, "description"),
         parameters: yaml_load_parameters(hash)?,
+        request_body: yaml_hash_lookup(hash, "requestBody", |v| Some(RequestBody::try_from(v)))
+          .transpose()?,
         extensions: yaml_extract_extensions(&hash)?
       })
     } else {
@@ -535,13 +542,149 @@ impl TryFrom<&Hash> for ReusableObject {
   }
 }
 
+/// 4.6.13 Request Body Object
+/// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#fixed-fields-11)
+#[derive(Debug, Clone)]
+pub struct RequestBody {
+  /// Content-Type for the request content.
+  pub content_type: Option<String>,
+  /// Value representing the request body payload.
+  pub payload: Option<Rc<dyn Payload + Send + Sync>>,
+  /// Extension values
+  pub extensions: HashMap<String, AnyValue>
+}
+
+#[cfg(feature = "yaml")]
+impl TryFrom<&Yaml> for RequestBody {
+  type Error = anyhow::Error;
+
+  fn try_from(value: &Yaml) -> Result<Self, Self::Error> {
+    if let Some(hash) = value.as_hash() {
+      let content_type = yaml_hash_lookup_string(hash, "contentType");
+      let payload = yaml_load_payload(hash, "payload", content_type.as_ref())?;
+      Ok(RequestBody {
+        content_type,
+        payload,
+        extensions: yaml_extract_extensions(&hash)?
+      })
+    } else {
+      Err(anyhow!("YAML value must be a Hash, got {}", yaml_type_name(value)))
+    }
+  }
+}
+
+#[cfg(feature = "yaml")]
+fn yaml_load_payload(
+  hash: &Hash,
+  key: &str,
+  _content_type: Option<&String>
+) -> anyhow::Result<Option<Rc<dyn Payload + Send + Sync>>> {
+  yaml_hash_lookup(hash, key, |value| {
+    match value {
+      Yaml::String(s) => {
+        let payload: Rc<dyn Payload + Send + Sync> = Rc::new(StringPayload(s.clone()));
+        Some(Ok(payload))
+      },
+      Yaml::Null => Some(Ok(Rc::new(EmptyPayload))),
+      _ => Some(yaml_to_json(value)
+        .map(|json| {
+          let payload: Rc<dyn Payload + Send + Sync> = Rc::new(JsonPayload(json));
+          payload
+        }))
+    }
+  }).transpose()
+}
+
+impl PartialEq for RequestBody {
+  fn eq(&self, other: &Self) -> bool {
+    if self.content_type == other.content_type && self.extensions == other.extensions {
+      if self.payload.is_none() && other.payload.is_none() {
+        true
+      } else if let Some(payload) = &self.payload && let Some(other_payload) = &other.payload {
+        payload.as_bytes() == other_payload.as_bytes()
+      } else {
+        false
+      }
+    } else {
+      false
+    }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use std::any::Any;
+  use std::rc::Rc;
+
+  use expectest::expect;
+  use expectest::matchers::be_equal_to;
+  use maplit::hashmap;
+
+  use crate::extensions::AnyValue;
+  use crate::payloads::StringPayload;
+  use crate::v1_0::RequestBody;
+
+  #[test]
+  fn request_body_partial_equals() {
+    let body1 = RequestBody {
+      content_type: None,
+      payload: None,
+      extensions: Default::default()
+    };
+    let body2 = RequestBody {
+      content_type: Some("text/plain".to_string()),
+      payload: None,
+      extensions: Default::default()
+    };
+    let body3 = RequestBody {
+      content_type: None,
+      payload: None,
+      extensions: hashmap!{
+        "a".to_string() => AnyValue::Integer(100)
+      }
+    };
+    let body4 = RequestBody {
+      content_type: None,
+      payload: Some(Rc::new(StringPayload("some text".to_string()))),
+      extensions: hashmap!{
+        "a".to_string() => AnyValue::Integer(100)
+      }
+    };
+
+    expect!(&body1).to(be_equal_to(&body1));
+    expect!(&body1).to_not(be_equal_to(&body2));
+    expect!(&body1).to_not(be_equal_to(&body3));
+    expect!(&body1).to_not(be_equal_to(&body4));
+    expect!(&body2).to(be_equal_to(&body2));
+    expect!(&body2).to_not(be_equal_to(&body1));
+    expect!(&body2).to_not(be_equal_to(&body3));
+    expect!(&body2).to_not(be_equal_to(&body4));
+    expect!(&body3).to(be_equal_to(&body3));
+    expect!(&body3).to_not(be_equal_to(&body1));
+    expect!(&body3).to_not(be_equal_to(&body2));
+    expect!(&body3).to_not(be_equal_to(&body4));
+    expect!(&body4).to(be_equal_to(&body4));
+    expect!(&body4).to_not(be_equal_to(&body1));
+    expect!(&body4).to_not(be_equal_to(&body2));
+    expect!(&body4).to_not(be_equal_to(&body3));
+
+    let payload: &dyn Any = body4.payload.as_ref().unwrap().as_ref();
+    let p = payload.downcast_ref::<StringPayload>().unwrap();
+    expect!(&p.0).to(be_equal_to("some text"));
+  }
+}
+
 #[cfg(test)]
 #[cfg(feature = "yaml")]
 mod yaml_tests {
   use expectest::prelude::*;
   use maplit::hashmap;
-  use yaml_rust2::Yaml;
+  use pretty_assertions::assert_eq;
+  use serde_json::json;
+  use std::any::Any;
+  use trim_margin::MarginTrimmable;
   use yaml_rust2::yaml::Hash;
+  use yaml_rust2::{Yaml, YamlLoader};
 
   use crate::extensions::AnyValue;
   use crate::v1_0::*;
@@ -934,5 +1077,120 @@ mod yaml_tests {
         extensions: Default::default()
       })
     ]));
+  }
+
+  #[test]
+  fn load_request_body() {
+    let mut hash = Hash::new();
+    hash.insert(Yaml::String("contentType".to_string()), Yaml::String("text/plain".to_string()));
+    hash.insert(Yaml::String("payload".to_string()), Yaml::String("some text".to_string()));
+
+    let body = RequestBody::try_from(&Yaml::Hash(hash)).unwrap();
+    expect!(body.content_type).to(be_some().value("text/plain"));
+  }
+
+  #[test]
+  fn request_body_supports_extensions() {
+    let mut hash = Hash::new();
+    hash.insert(Yaml::String("contentType".to_string()), Yaml::String("text/plain".to_string()));
+    hash.insert(Yaml::String("x-one".to_string()), Yaml::String("1".to_string()));
+    hash.insert(Yaml::String("x-two".to_string()), Yaml::Integer(2));
+
+    let parameter = RequestBody::try_from(&Yaml::Hash(hash)).unwrap();
+    expect!(parameter.extensions).to(be_equal_to(hashmap!{
+      "one".to_string() => AnyValue::String("1".to_string()),
+      "two".to_string() => AnyValue::Integer(2)
+    }));
+  }
+
+  #[test]
+  fn load_payload() {
+    let body = r#"
+                    contentType: application/json
+                    payload: |
+                      {
+                        "petOrder": {
+                          "petId": "{$inputs.pet_id}",
+                          "couponCode": "{$inputs.coupon_code}",
+                          "quantity": "{$inputs.quantity}",
+                          "status": "placed",
+                          "complete": false
+                        }
+                      }
+                    "#;
+    let yaml = YamlLoader::load_from_str(body).unwrap();
+
+    let body = RequestBody::try_from(&yaml[0]).unwrap();
+    expect!(body.content_type).to(be_some().value("application/json"));
+    let payload: &dyn Any = body.payload.as_ref().unwrap().as_ref();
+    let p = payload.downcast_ref::<StringPayload>().unwrap();
+    assert_eq!(
+      r#" |{
+          |  "petOrder": {
+          |    "petId": "{$inputs.pet_id}",
+          |    "couponCode": "{$inputs.coupon_code}",
+          |    "quantity": "{$inputs.quantity}",
+          |    "status": "placed",
+          |    "complete": false
+          |  }
+          |}
+          |"#.trim_margin().as_ref().unwrap(), &p.0);
+
+    let body = r#"
+                    contentType: application/json
+                    payload:
+                      petOrder:
+                        petId: $inputs.pet_id
+                        couponCode: $inputs.coupon_code
+                        quantity: $inputs.quantity
+                        status: placed
+                        complete: false
+                    "#;
+    let yaml = YamlLoader::load_from_str(body).unwrap();
+
+    let body = RequestBody::try_from(&yaml[0]).unwrap();
+    expect!(body.content_type).to(be_some().value("application/json"));
+    let payload: &dyn Any = body.payload.as_ref().unwrap().as_ref();
+    let p = payload.downcast_ref::<JsonPayload>().unwrap();
+    assert_eq!(
+      &json!({
+       "petOrder": {
+          "petId": "$inputs.pet_id",
+          "couponCode": "$inputs.coupon_code",
+          "quantity": "$inputs.quantity",
+          "status": "placed",
+          "complete": false
+        }
+      }),
+      &p.0
+    );
+
+    let body = r#"
+                    contentType: application/x-www-form-urlencoded
+                    payload:
+                      client_id: $inputs.clientId
+                      grant_type: $inputs.grantType
+                      redirect_uri: $inputs.redirectUri
+                      client_secret: $inputs.clientSecret
+                      code: $steps.browser-authorize.outputs.code
+                      scope: $inputs.scope
+                    "#;
+    let yaml = YamlLoader::load_from_str(body).unwrap();
+
+    let body = RequestBody::try_from(&yaml[0]).unwrap();
+    expect!(body.content_type).to(be_some().value("application/x-www-form-urlencoded"));
+    let payload: &dyn Any = body.payload.as_ref().unwrap().as_ref();
+    let p = payload.downcast_ref::<JsonPayload>().unwrap();
+    assert_eq!(
+      &json!({
+        "client_id": "$inputs.clientId",
+        "grant_type": "$inputs.grantType",
+        "redirect_uri": "$inputs.redirectUri",
+        "client_secret": "$inputs.clientSecret",
+        "code": "$steps.browser-authorize.outputs.code",
+        "scope": "$inputs.scope"
+      }),
+      &p.0
+    );
   }
 }

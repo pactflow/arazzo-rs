@@ -16,6 +16,7 @@ yaml = ["dep:yaml-rust2"]
 
 [dependencies]
 anyhow = "1.0.98"
+bytes = "1.10.0"
 itertools = "0.14.0"
 maplit = "1.0.2"
 serde_json = "1.0.139"
@@ -23,3 +24,5 @@ yaml-rust2 = { version = "0.10.3", optional = true }
 
 [dev-dependencies]
 expectest = "0.12.0"
+pretty_assertions = "1.4.1"
+trim-margin = "0.1.0"
