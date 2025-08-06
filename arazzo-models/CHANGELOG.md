@@ -1,5 +1,16 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.0.2 - All spec objects completed
+
+* a50365b - feat: Added Criterion (Ronald Holshausen, Wed Aug 6 15:20:43 2025 +1000)
+* 8bd2bdb - feat: Added success, failure and outputs to Step (Ronald Holshausen, Wed Aug 6 14:29:46 2025 +1000)
+* 4a319c5 - feat: Added some conversion functions to Payload (Ronald Holshausen, Wed Aug 6 14:10:49 2025 +1000)
+* 1d9c94e - feat: Added RequestBody and Payloads (Ronald Holshausen, Wed Aug 6 14:04:28 2025 +1000)
+* 86fc4d2 - feat: Added Step parameters (Ronald Holshausen, Wed Aug 6 10:55:46 2025 +1000)
+* 3b36466 - feat: Added simple Step fields (Ronald Holshausen, Wed Aug 6 10:41:53 2025 +1000)
+* b53f2bb - feat: Added Workflow parameters and outputs (Ronald Holshausen, Wed Aug 6 10:19:27 2025 +1000)
+* e17f453 - bump version to 0.0.2 (Ronald Holshausen, Wed Aug 6 09:27:00 2025 +1000)
+
 # 0.0.1 - Added Workflow and Step Objects
 
 * 76a9d77 - chore: Prep for running release script (Ronald Holshausen, Wed Aug 6 09:24:02 2025 +1000)
