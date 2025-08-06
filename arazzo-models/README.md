@@ -5,4 +5,4 @@ Rust models for the [Arazzo Open API specification](https://spec.openapis.org/ar
 All features are enabled by default
 
 * `yaml`: Enables loading the models from a YAML document (uses yaml-rust2 crate)
- 
+* `json`: Enables loading the models from a JSON document (uses serde_json crate)

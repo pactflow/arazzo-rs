@@ -1,12 +1,12 @@
 use expectest::prelude::*;
 use itertools::Either;
 use maplit::hashmap;
-use serde_json::json;
+use serde_json::{json, Value};
 use yaml_rust2::YamlLoader;
 use arazzo_models::extensions::AnyValue;
 use arazzo_models::v1_0::{ArazzoDescription, Criterion, ParameterObject};
 
-const BASIC_SPEC_EXAMPLE: &str = r#"arazzo: 1.0.1
+const BASIC_SPEC_EXAMPLE_YAML: &str = r#"arazzo: 1.0.1
 info:
   title: A pet purchasing workflow
   summary: This Arazzo Description showcases the workflow for how to purchase a pet through a sequence of API calls
@@ -68,9 +68,102 @@ workflows:
       available: $steps.getPetStep.outputs.availablePets
 "#;
 
+const BASIC_SPEC_EXAMPLE_JSON: &str = r#"{
+  "arazzo": "1.0.1",
+  "info": {
+    "title": "A pet purchasing workflow",
+    "summary": "This Arazzo Description showcases the workflow for how to purchase a pet through a sequence of API calls",
+    "description": "This Arazzo Description walks you through the workflow and steps of `searching` for, `selecting`, and `purchasing` an available pet.\n",
+    "version": "1.0.0"
+  },
+  "sourceDescriptions": [
+    {
+      "name": "petStoreDescription",
+      "url": "https://github.com/swagger-api/swagger-petstore/blob/master/src/main/resources/openapi.yaml",
+      "type": "openapi"
+    }
+  ],
+  "workflows": [
+    {
+      "workflowId": "loginUserAndRetrievePet",
+      "summary": "Login User and then retrieve pets",
+      "description": "This workflow lays out the steps to login a user and then retrieve pets",
+      "inputs": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        }
+      },
+      "steps": [
+        {
+          "stepId": "loginStep",
+          "description": "This step demonstrates the user login step",
+          "operationId": "loginUser",
+          "parameters": [
+            {
+              "name": "username",
+              "in": "query",
+              "value": "$inputs.username"
+            },
+            {
+              "name": "password",
+              "in": "query",
+              "value": "$inputs.password"
+            }
+          ],
+          "successCriteria": [
+            {
+              "condition": "$statusCode == 200"
+            }
+          ],
+          "outputs": {
+            "tokenExpires": "$response.header.X-Expires-After",
+            "rateLimit": "$response.header.X-Rate-Limit",
+            "sessionToken": "$response.body"
+          }
+        },
+        {
+          "stepId": "getPetStep",
+          "description": "retrieve a pet by status from the GET pets endpoint",
+          "operationPath": "{$sourceDescriptions.petstoreDescription.url}#/paths/~1pet~1findByStatus/get",
+          "parameters": [
+            {
+              "name": "status",
+              "in": "query",
+              "value": "available"
+            },
+            {
+              "name": "Authorization",
+              "in": "header",
+              "value": "$steps.loginUser.outputs.sessionToken"
+            }
+          ],
+          "successCriteria": [
+            {
+              "condition": "$statusCode == 200"
+            }
+          ],
+          "outputs": {
+            "availablePets": "$response.body"
+          }
+        }
+      ],
+      "outputs": {
+        "available": "$steps.getPetStep.outputs.availablePets"
+      }
+    }
+  ]
+}
+"#;
+
 #[test]
-fn loads_the_main_spec_descriptors() {
-  let yaml = YamlLoader::load_from_str(BASIC_SPEC_EXAMPLE).unwrap();
+fn loads_the_main_spec_descriptors_from_yaml() {
+  let yaml = YamlLoader::load_from_str(BASIC_SPEC_EXAMPLE_YAML).unwrap();
   let descriptor = ArazzoDescription::try_from(&yaml[0]).unwrap();
 
   expect!(descriptor.arazzo).to(be_equal_to("1.0.1"));
@@ -180,4 +273,15 @@ fn loads_the_main_spec_descriptors() {
       extensions: Default::default()
     }
   ]));
+}
+
+#[test]
+fn loads_the_main_spec_descriptors_from_json() {
+  // let yaml = YamlLoader::load_from_str(BASIC_SPEC_EXAMPLE_YAML).unwrap();
+  // let yaml_descriptor = ArazzoDescription::try_from(&yaml[0]).unwrap();
+  //
+  // let json: Value = serde_json::from_str(BASIC_SPEC_EXAMPLE_JSON).unwrap();
+  // let json_descriptor = ArazzoDescription::try_from(&json).unwrap();
+  //
+  // expect!(json_descriptor).to(be_equal_to(yaml_descriptor));
 }
