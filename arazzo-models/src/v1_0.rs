@@ -230,6 +230,17 @@ impl TryFrom<&Yaml> for Workflow {
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#step-object)
 #[derive(Debug, Clone, PartialEq)]
 pub struct Step {
+  /// Unique string to represent the step.
+  pub step_id: String,
+  /// Name of an existing, resolvable operation, as defined with a unique operation Id and existing
+  /// within one of the source descriptions.
+  pub operation_id: Option<String>,
+  /// Reference to a Source Description Object combined with a JSON Pointer to reference an operation.
+  pub operation_path: Option<String>,
+  /// The workflow Id referencing an existing workflow within the Arazzo Description.
+  pub workflow_id: Option<String>,
+  /// Description of the step.
+  pub description: Option<String>,
   /// Extension values
   pub extensions: HashMap<String, AnyValue>
 }
@@ -260,6 +271,11 @@ impl TryFrom<&Yaml> for Step {
   fn try_from(value: &Yaml) -> Result<Self, Self::Error> {
     if let Some(hash) = value.as_hash() {
       Ok(Step {
+        step_id: yaml_hash_require_string(&hash, "stepId")?,
+        operation_id: yaml_hash_lookup_string(&hash, "operationId"),
+        operation_path: yaml_hash_lookup_string(&hash, "operationPath"),
+        workflow_id: yaml_hash_lookup_string(&hash, "workflowId"),
+        description: yaml_hash_lookup_string(&hash, "description"),
         extensions: yaml_extract_extensions(&hash)?
       })
     } else {

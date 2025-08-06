@@ -107,11 +107,24 @@ fn loads_the_main_spec_descriptors() {
       }
     }
   })));
+  expect!(workflow.outputs.clone()).to(be_equal_to(hashmap!{
+    "available".to_string() => "$steps.getPetStep.outputs.availablePets".to_string()
+  }));
 
   let steps = &workflow.steps;
   expect!(steps.len()).to(be_equal_to(2));
 
-  expect!(workflow.outputs.clone()).to(be_equal_to(hashmap!{
-    "available".to_string() => "$steps.getPetStep.outputs.availablePets".to_string()
-  }));
+  let step1 = steps[0].clone();
+  expect!(step1.step_id).to(be_equal_to("loginStep"));
+  expect!(step1.description).to(be_some().value("This step demonstrates the user login step"));
+  expect!(step1.operation_id).to(be_some().value("loginUser"));
+  expect!(step1.operation_path).to(be_none());
+  expect!(step1.workflow_id).to(be_none());
+
+  let step2 = steps[1].clone();
+  expect!(step2.step_id).to(be_equal_to("getPetStep"));
+  expect!(step2.description).to(be_some().value("retrieve a pet by status from the GET pets endpoint"));
+  expect!(step2.operation_id).to(be_none());
+  expect!(step2.operation_path).to(be_some().value("{$sourceDescriptions.petstoreDescription.url}#/paths/~1pet~1findByStatus/get"));
+  expect!(step2.workflow_id).to(be_none());
 }
