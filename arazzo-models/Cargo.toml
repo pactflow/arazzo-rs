@@ -1,6 +1,6 @@
 [package]
 name = "arazzo-models"
-version = "0.0.2"
+version = "0.0.3"
 edition = "2024"
 authors = ["Ronald Holshausen <ronald.holshausen@smartbear.com>"]
 description = "Rust models for the Arazzo Open API specification"
