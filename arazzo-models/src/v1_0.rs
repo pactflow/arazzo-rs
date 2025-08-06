@@ -8,7 +8,7 @@ use serde_json::Value;
 #[cfg(feature = "yaml")] use yaml_rust2::Yaml;
 #[cfg(feature = "yaml")] use yaml_rust2::yaml::Hash;
 
-use crate::extensions::ExtensionValue;
+use crate::extensions::AnyValue;
 #[cfg(feature = "yaml")] use crate::extensions::yaml_extract_extensions;
 #[cfg(feature = "yaml")] use crate::yaml::{
   yaml_hash_entry_to_json,
@@ -23,7 +23,7 @@ use crate::extensions::ExtensionValue;
 
 /// 4.6.1 Arazzo Description is the root object of the loaded specification.
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#arazzo-description)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ArazzoDescription {
   /// Version number of the Arazzo Specification
   pub arazzo: String,
@@ -36,7 +36,7 @@ pub struct ArazzoDescription {
   /// An element to hold shared schemas.
   pub components: Components,
   /// Extension values
-  pub extensions: HashMap<String, ExtensionValue>,
+  pub extensions: HashMap<String, AnyValue>,
 }
 
 #[cfg(feature = "yaml")]
@@ -70,7 +70,7 @@ impl TryFrom<&Yaml> for ArazzoDescription {
 
 /// 4.6.2 Info Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#info-object)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Info {
   /// A human-readable title of the Arazzo Description.
   pub title: String,
@@ -81,7 +81,7 @@ pub struct Info {
   /// Document version
   pub version: String,
   /// Extension values
-  pub extensions: HashMap<String, ExtensionValue>
+  pub extensions: HashMap<String, AnyValue>
 }
 
 #[cfg(feature = "yaml")]
@@ -105,7 +105,7 @@ impl TryFrom<&Hash> for Info {
 
 /// 4.6.3 Source Description Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#source-description-object)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SourceDescription {
   /// Unique name for the source description.
   pub name: String,
@@ -114,7 +114,7 @@ pub struct SourceDescription {
   /// The type of source description.
   pub r#type: Option<String>,
   /// Extension values
-  pub extensions: HashMap<String, ExtensionValue>
+  pub extensions: HashMap<String, AnyValue>
 }
 
 #[cfg(feature = "yaml")]
@@ -156,7 +156,7 @@ impl TryFrom<&Yaml> for SourceDescription {
 
 /// 4.6.4 Workflow Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#workflow-object)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Workflow {
   /// Unique string to represent the workflow.
   pub workflow_id: String,
@@ -164,18 +164,22 @@ pub struct Workflow {
   pub summary: Option<String>,
   /// Description of the workflow.
   pub description: Option<String>,
-  /// JSON Schema 2020-12 object representing the input parameters used by this workflow.
+  /// JSON Schema 2020-12 object representing the input parameters used by the workflow.
   pub inputs: Value,
   /// List of workflows that must be completed before this workflow can be processed.
   pub depends_on: Vec<String>,
   /// An ordered list of workflow steps
   pub steps: Vec<Step>,
-  /// List of success actions that are applicable for all steps described under this workflow.
+  /// List of success actions that are applicable for all steps described under the workflow.
   pub success_actions: Vec<Either<SuccessObject, ReusableObject>>,
-  /// List of success actions that are applicable for all steps described under this workflow.
+  /// List of success actions that are applicable for all steps described under the workflow.
   pub failure_actions: Vec<Either<FailureObject, ReusableObject>>,
+  /// Defined outputs of the workflow.
+  pub outputs: HashMap<String, String>,
+  /// List of parameters that are applicable for all steps described under the workflow.
+  pub parameters: Vec<Either<ParameterObject, ReusableObject>>,
   /// Extension values
-  pub extensions: HashMap<String, ExtensionValue>
+  pub extensions: HashMap<String, AnyValue>
 }
 
 #[cfg(feature = "yaml")]
@@ -204,14 +208,16 @@ impl TryFrom<&Yaml> for Workflow {
   fn try_from(value: &Yaml) -> Result<Self, Self::Error> {
     if let Some(hash) = value.as_hash() {
       Ok(Workflow {
-        workflow_id: yaml_hash_require_string(&hash, "workflowId")?,
-        summary: yaml_hash_lookup_string(&hash, "summary"),
-        description: yaml_hash_lookup_string(&hash, "description"),
-        inputs: yaml_hash_entry_to_json(&hash, "inputs")?,
-        depends_on: yaml_hash_lookup_string_list(&hash, "dependsOn").unwrap_or_default(),
+        workflow_id: yaml_hash_require_string(hash, "workflowId")?,
+        summary: yaml_hash_lookup_string(hash, "summary"),
+        description: yaml_hash_lookup_string(hash, "description"),
+        inputs: yaml_hash_entry_to_json(hash, "inputs")?,
+        depends_on: yaml_hash_lookup_string_list(hash, "dependsOn").unwrap_or_default(),
         steps: yaml_load_steps(hash)?,
         success_actions: yaml_load_success_actions(hash)?,
         failure_actions: yaml_load_failure_actions(hash)?,
+        outputs: yaml_load_outputs(hash),
+        parameters: yaml_load_parameters(hash)?,
         extensions: yaml_extract_extensions(&hash)?
       })
     } else {
@@ -222,10 +228,10 @@ impl TryFrom<&Yaml> for Workflow {
 
 /// 4.6.5 Step Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#step-object)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Step {
   /// Extension values
-  pub extensions: HashMap<String, ExtensionValue>
+  pub extensions: HashMap<String, AnyValue>
 }
 
 #[cfg(feature = "yaml")]
@@ -260,6 +266,72 @@ impl TryFrom<&Yaml> for Step {
       Err(anyhow!("YAML value must be a Hash, got {}", yaml_type_name(value)))
     }
   }
+}
+
+/// 4.6.6 Parameter Object
+/// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#parameter-object)
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParameterObject {
+  /// The name of the parameter.
+  pub name: String,
+  /// The location of the parameter.
+  pub r#in: Option<String>,
+  /// Value to pass in the parameter.
+  pub value: Either<AnyValue, String>,
+  /// Extension values
+  pub extensions: HashMap<String, AnyValue>
+}
+
+#[cfg(feature = "yaml")]
+impl TryFrom<&Hash> for ParameterObject {
+  type Error = anyhow::Error;
+
+  fn try_from(value: &Hash) -> Result<Self, Self::Error> {
+    Ok(ParameterObject {
+      name: yaml_hash_require_string(value, "name")?,
+      r#in: yaml_hash_lookup_string(value, "in"),
+      value: yaml_load_parameter_value(value, "value")?,
+      extensions: yaml_extract_extensions(value)?
+    })
+  }
+}
+
+#[cfg(feature = "yaml")]
+fn yaml_load_parameters(hash: &Hash) -> anyhow::Result<Vec<Either<ParameterObject, ReusableObject>>> {
+  if let Some(array) = yaml_hash_lookup(hash, "parameters", |v | v.as_vec().cloned()) {
+    let mut list = vec![];
+
+    for item in &array {
+      if let Some(hash) = item.as_hash() {
+        if hash.contains_key(&Yaml::String("reference".to_string())) {
+          list.push(Either::Right(ReusableObject::try_from(hash)?));
+        } else {
+          list.push(Either::Left(ParameterObject::try_from(hash)?));
+        }
+      }
+    }
+
+    Ok(list)
+  } else {
+    Ok(vec![])
+  }
+}
+
+#[cfg(feature = "yaml")]
+fn yaml_load_parameter_value(hash: &Hash, key: &str) -> anyhow::Result<Either<AnyValue, String>> {
+  yaml_hash_lookup(hash, key, |v | {
+    if let Some(s) = v.as_str() {
+      if s.starts_with('$') {
+        Some(Either::Right(s.to_string()))
+      } else {
+        Some(Either::Left(AnyValue::String(s.to_string())))
+      }
+    } else {
+      AnyValue::try_from(v)
+        .ok()
+        .map(Either::Left)
+    }
+  }).ok_or_else(|| anyhow!("Parameter value is required [4.6.6.1 Fixed Fields]"))
 }
 
 #[cfg(feature = "yaml")]
@@ -304,9 +376,27 @@ fn yaml_load_failure_actions(hash: &Hash) -> anyhow::Result<Vec<Either<FailureOb
   }
 }
 
+#[cfg(feature = "yaml")]
+fn yaml_load_outputs(hash: &Hash) -> HashMap<String, String> {
+  yaml_hash_lookup(hash, "outputs", |v | {
+    if let Some(outputs_hash) = v.as_hash() {
+      Some(outputs_hash.iter()
+        .filter_map(|(k, v)| {
+          if let Some(key) = k.as_str() {
+            v.as_str().map(|value| (key.to_string(), value.to_string()))
+          } else {
+            None
+          }
+        }).collect())
+    } else {
+      None
+    }
+  }).unwrap_or_default()
+}
+
 /// 4.6.7 Success Action Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#success-action-object)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SuccessObject {
   /// The name of the success action.
   pub name: String,
@@ -318,7 +408,7 @@ pub struct SuccessObject {
   /// The stepId to transfer to upon success of the step.
   pub step_id: Option<String>,
   /// Extension values
-  pub extensions: HashMap<String, ExtensionValue>
+  pub extensions: HashMap<String, AnyValue>
 }
 
 #[cfg(feature = "yaml")]
@@ -338,7 +428,7 @@ impl TryFrom<&Hash> for SuccessObject {
 
 /// 4.6.8 Failure Action Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#failure-action-object)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FailureObject {
   /// The name of the success action.
   pub name: String,
@@ -356,7 +446,7 @@ pub struct FailureObject {
   /// failing the overall step.
   pub retry_limit: Option<i64>,
   /// Extension values
-  pub extensions: HashMap<String, ExtensionValue>
+  pub extensions: HashMap<String, AnyValue>
 }
 
 #[cfg(feature = "yaml")]
@@ -378,10 +468,10 @@ impl TryFrom<&Hash> for FailureObject {
 
 /// 4.6.9 Components Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#components-object)
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Components {
   /// Extension values
-  pub extensions: HashMap<String, ExtensionValue>
+  pub extensions: HashMap<String, AnyValue>
 }
 
 #[cfg(feature = "yaml")]
@@ -401,7 +491,7 @@ impl TryFrom<&Hash> for Components {
 
 /// 4.6.10 Reusable Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#reusable-object)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ReusableObject {
   /// Runtime Expression used to reference the desired object.
   pub reference: String,
@@ -433,7 +523,7 @@ mod yaml_tests {
   use yaml_rust2::Yaml;
   use yaml_rust2::yaml::Hash;
 
-  use crate::extensions::ExtensionValue;
+  use crate::extensions::AnyValue;
   use crate::v1_0::*;
 
   #[test]
@@ -509,8 +599,8 @@ mod yaml_tests {
 
     let desc = ArazzoDescription::try_from(&Yaml::Hash(hash)).unwrap();
     expect!(desc.extensions).to(be_equal_to(hashmap!{
-      "one".to_string() => ExtensionValue::String("1".to_string()),
-      "two".to_string() => ExtensionValue::Integer(2)
+      "one".to_string() => AnyValue::String("1".to_string()),
+      "two".to_string() => AnyValue::Integer(2)
     }));
   }
 
@@ -553,8 +643,8 @@ mod yaml_tests {
     outer.insert(Yaml::String("info".to_string()), Yaml::Hash(hash));
     let info = Info::try_from(&outer).unwrap();
     expect!(info.extensions).to(be_equal_to(hashmap!{
-      "one".to_string() => ExtensionValue::String("1".to_string()),
-      "two".to_string() => ExtensionValue::Integer(2)
+      "one".to_string() => AnyValue::String("1".to_string()),
+      "two".to_string() => AnyValue::Integer(2)
     }));
   }
 
@@ -568,8 +658,8 @@ mod yaml_tests {
 
     let desc = SourceDescription::try_from(&Yaml::Hash(hash)).unwrap();
     expect!(desc.extensions).to(be_equal_to(hashmap!{
-      "one".to_string() => ExtensionValue::String("1".to_string()),
-      "two".to_string() => ExtensionValue::Integer(2)
+      "one".to_string() => AnyValue::String("1".to_string()),
+      "two".to_string() => AnyValue::Integer(2)
     }));
   }
 
@@ -594,8 +684,8 @@ mod yaml_tests {
 
     let wf = Workflow::try_from(&Yaml::Hash(hash)).unwrap();
     expect!(wf.extensions).to(be_equal_to(hashmap!{
-      "one".to_string() => ExtensionValue::String("1".to_string()),
-      "two".to_string() => ExtensionValue::Integer(2)
+      "one".to_string() => AnyValue::String("1".to_string()),
+      "two".to_string() => AnyValue::Integer(2)
     }));
   }
 
@@ -608,8 +698,8 @@ mod yaml_tests {
 
     let step = Step::try_from(&Yaml::Hash(hash)).unwrap();
     expect!(step.extensions).to(be_equal_to(hashmap!{
-      "one".to_string() => ExtensionValue::String("1".to_string()),
-      "two".to_string() => ExtensionValue::Integer(2)
+      "one".to_string() => AnyValue::String("1".to_string()),
+      "two".to_string() => AnyValue::Integer(2)
     }));
   }
 
@@ -625,8 +715,8 @@ mod yaml_tests {
 
     let components = Components::try_from(&outer).unwrap();
     expect!(components.extensions).to(be_equal_to(hashmap!{
-      "one".to_string() => ExtensionValue::String("1".to_string()),
-      "two".to_string() => ExtensionValue::Integer(2)
+      "one".to_string() => AnyValue::String("1".to_string()),
+      "two".to_string() => AnyValue::Integer(2)
     }));
   }
 
@@ -665,8 +755,8 @@ mod yaml_tests {
 
     let success = SuccessObject::try_from(&hash).unwrap();
     expect!(success.extensions).to(be_equal_to(hashmap!{
-      "one".to_string() => ExtensionValue::String("1".to_string()),
-      "two".to_string() => ExtensionValue::Integer(2)
+      "one".to_string() => AnyValue::String("1".to_string()),
+      "two".to_string() => AnyValue::Integer(2)
     }));
   }
 
@@ -711,8 +801,8 @@ mod yaml_tests {
 
     let failure = FailureObject::try_from(&hash).unwrap();
     expect!(failure.extensions).to(be_equal_to(hashmap!{
-      "one".to_string() => ExtensionValue::String("1".to_string()),
-      "two".to_string() => ExtensionValue::Integer(2)
+      "one".to_string() => AnyValue::String("1".to_string()),
+      "two".to_string() => AnyValue::Integer(2)
     }));
   }
 
@@ -733,5 +823,74 @@ mod yaml_tests {
     let obj = ReusableObject::try_from(&hash).unwrap();
     expect!(&obj.reference).to(be_equal_to("$test"));
     expect!(obj.value.clone()).to(be_none());
+  }
+
+  #[test]
+  fn load_workflow_outputs() {
+    let mut outputs = Hash::new();
+    outputs.insert(Yaml::String("tokenExpires".to_string()), Yaml::String("$response.header.X-Expires-After".to_string()));
+    outputs.insert(Yaml::String("rateLimit".to_string()), Yaml::String("$response.header.X-Rate-Limit".to_string()));
+    outputs.insert(Yaml::String("invalid".to_string()), Yaml::Array(vec![]));
+
+    let mut hash = Hash::new();
+    hash.insert(Yaml::String("workflowId".to_string()), Yaml::String("test".to_string()));
+    hash.insert(Yaml::String("steps".to_string()), Yaml::Array(steps_fixture()));
+    hash.insert(Yaml::String("outputs".to_string()), Yaml::Hash(outputs));
+
+    let wf = Workflow::try_from(&Yaml::Hash(hash)).unwrap();
+    expect!(wf.outputs).to(be_equal_to(hashmap!{
+      "tokenExpires".to_string() => "$response.header.X-Expires-After".to_string(),
+      "rateLimit".to_string() => "$response.header.X-Rate-Limit".to_string()
+    }));
+  }
+
+  #[test]
+  fn load_workflow_parameters() {
+    let mut parameter = Hash::new();
+    parameter.insert(Yaml::String("name".to_string()), Yaml::String("username".to_string()));
+    parameter.insert(Yaml::String("in".to_string()), Yaml::String("query".to_string()));
+    parameter.insert(Yaml::String("value".to_string()), Yaml::String("$inputs.username".to_string()));
+
+    let mut hash = Hash::new();
+    hash.insert(Yaml::String("workflowId".to_string()), Yaml::String("test".to_string()));
+    hash.insert(Yaml::String("steps".to_string()), Yaml::Array(steps_fixture()));
+    hash.insert(Yaml::String("parameters".to_string()), Yaml::Array(vec![Yaml::Hash(parameter)]));
+
+    let wf = Workflow::try_from(&Yaml::Hash(hash)).unwrap();
+    expect!(wf.parameters).to(be_equal_to(vec![
+      Either::Left(ParameterObject {
+        name: "username".to_string(),
+        r#in: Some("query".to_string()),
+        value: Either::Right("$inputs.username".to_string()),
+        extensions: Default::default()
+      })
+    ]));
+
+    let mut parameter_hash = Hash::new();
+    parameter_hash.insert(Yaml::String("name".to_string()), Yaml::String("username".to_string()));
+    parameter_hash.insert(Yaml::String("value".to_string()), Yaml::Integer(10));
+
+    let parameter = ParameterObject::try_from(&parameter_hash).unwrap();
+    expect!(parameter).to(be_equal_to(ParameterObject {
+      name: "username".to_string(),
+      r#in: None,
+      value: Either::Left(AnyValue::Integer(10)),
+      extensions: Default::default()
+    }));
+  }
+
+  #[test]
+  fn parameter_object_supports_extensions() {
+    let mut hash = Hash::new();
+    hash.insert(Yaml::String("name".to_string()), Yaml::String("username".to_string()));
+    hash.insert(Yaml::String("value".to_string()), Yaml::Integer(10));
+    hash.insert(Yaml::String("x-one".to_string()), Yaml::String("1".to_string()));
+    hash.insert(Yaml::String("x-two".to_string()), Yaml::Integer(2));
+
+    let parameter = ParameterObject::try_from(&hash).unwrap();
+    expect!(parameter.extensions).to(be_equal_to(hashmap!{
+      "one".to_string() => AnyValue::String("1".to_string()),
+      "two".to_string() => AnyValue::Integer(2)
+    }));
   }
 }

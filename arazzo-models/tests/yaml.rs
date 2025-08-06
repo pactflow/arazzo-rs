@@ -1,4 +1,5 @@
 use expectest::prelude::*;
+use maplit::hashmap;
 use serde_json::json;
 use yaml_rust2::YamlLoader;
 
@@ -109,4 +110,8 @@ fn loads_the_main_spec_descriptors() {
 
   let steps = &workflow.steps;
   expect!(steps.len()).to(be_equal_to(2));
+
+  expect!(workflow.outputs.clone()).to(be_equal_to(hashmap!{
+    "available".to_string() => "$steps.getPetStep.outputs.availablePets".to_string()
+  }));
 }
