@@ -108,61 +108,61 @@ use crate::v1_0::{ArazzoDescription, Components, Criterion, CriterionExpressionT
 //     Err(anyhow!("Workflow Object is required [4.6.1.1 Fixed Fields]"))
 //   }
 // }
-//
-// impl TryFrom<&Yaml> for Workflow {
-//   type Error = anyhow::Error;
-//
-//   fn try_from(value: &Yaml) -> Result<Self, Self::Error> {
-//     if let Some(hash) = value.as_hash() {
-//       Ok(Workflow {
-//         workflow_id: yaml_hash_require_string(hash, "workflowId")?,
-//         summary: yaml_hash_lookup_string(hash, "summary"),
-//         description: yaml_hash_lookup_string(hash, "description"),
-//         inputs: yaml_hash_entry_to_json(hash, "inputs")?,
-//         depends_on: yaml_hash_lookup_string_list(hash, "dependsOn").unwrap_or_default(),
-//         steps: yaml_load_steps(hash)?,
-//         success_actions: yaml_load_success_actions(hash)?,
-//         failure_actions: yaml_load_failure_actions(hash)?,
-//         outputs: yaml_load_outputs(hash),
-//         parameters: yaml_load_parameters(hash)?,
-//         extensions: yaml_extract_extensions(&hash)?
-//       })
-//     } else {
-//       Err(anyhow!("YAML value must be a Hash, got {}", yaml_type_name(value)))
-//     }
-//   }
-// }
-//
-// fn yaml_load_steps(hash: &Hash) -> anyhow::Result<Vec<Step>> {
-//   if let Some(array) = yaml_hash_lookup(hash, "steps", |v | v.as_vec().cloned()) {
-//     if array.is_empty() {
-//       Err(anyhow!("At lest one Step is required [4.6.4.1 Fixed Fields]"))
-//     } else {
-//       let mut list = vec![];
-//
-//       for item in &array {
-//         list.push(Step::try_from(item)?);
-//       }
-//
-//       Ok(list)
-//     }
-//   } else {
-//     Err(anyhow!("At lest one Step is required [4.6.4.1 Fixed Fields]"))
-//   }
-// }
+
+impl TryFrom<&Value> for Workflow {
+  type Error = anyhow::Error;
+
+  fn try_from(value: &Value) -> Result<Self, Self::Error> {
+    if let Some(map) = value.as_object() {
+      Ok(Workflow {
+        workflow_id: json_object_require_string(map, "workflowId")?,
+        summary: json_object_lookup_string(map, "summary"),
+        description: json_object_lookup_string(map, "description"),
+        inputs: map.get("inputs").cloned().unwrap_or_default(),
+        depends_on: json_object_lookup_string_list(map, "dependsOn").unwrap_or_default(),
+        steps: json_load_steps(map)?,
+        success_actions: json_load_success_actions(map)?,
+        failure_actions: json_load_failure_actions(map)?,
+        outputs: json_load_outputs(map),
+        parameters: json_load_parameters(map)?,
+        extensions: json_extract_extensions(&map)?
+      })
+    } else {
+      Err(anyhow!("JSON value must be an Object, got {:?}", value))
+    }
+  }
+}
+
+fn json_load_steps(map: &Map<String, Value>) -> anyhow::Result<Vec<Step>> {
+  if let Some(steps) = map.get("steps") &&
+     let Some(array) = steps.as_array() {
+    if array.is_empty() {
+      Err(anyhow!("At lest one Step is required [4.6.4.1 Fixed Fields]"))
+    } else {
+      let mut list = vec![];
+
+      for item in array {
+        list.push(Step::try_from(item)?);
+      }
+
+      Ok(list)
+    }
+  } else {
+    Err(anyhow!("At lest one Step is required [4.6.4.1 Fixed Fields]"))
+  }
+}
 
 fn json_load_parameters(map: &Map<String, Value>) -> anyhow::Result<Vec<Either<ParameterObject, ReusableObject>>> {
-  if let Some(array) = map.get("parameters") {
+  if let Some(parameters) = map.get("parameters") &&
+     let Some(array) = parameters.as_array() {
     let mut list = vec![];
 
-    if let Some(array) = array.as_array() {
-      for item in array {
-        if let Some(map) = item.as_object() {
-          if map.contains_key("reference") {
-            list.push(Either::Right(ReusableObject::try_from(item)?));
-          } else {
-            list.push(Either::Left(ParameterObject::try_from(item)?));
-          }
+    for item in array {
+      if let Some(map) = item.as_object() {
+        if map.contains_key("reference") {
+          list.push(Either::Right(ReusableObject::try_from(item)?));
+        } else {
+          list.push(Either::Left(ParameterObject::try_from(item)?));
         }
       }
     }
@@ -221,7 +221,7 @@ fn json_load_outputs(map: &Map<String, Value>) -> HashMap<String, String> {
   map.get("outputs").map(|v | {
     if let Some(outputs) = v.as_object() {
       outputs.iter()
-        .map(|(k, v)| (k.clone(), v.as_str().unwrap_or_default().to_string()))
+        .filter_map(|(k, v)| v.as_str().map(|v| (k.clone(), v.to_string())))
         .collect()
     } else {
       hashmap!{}
@@ -552,30 +552,25 @@ pub fn json_object_require_string(map: &Map<String, Value>, key: &str) -> anyhow
 //     None
 //   }
 // }
-//
-// /// Looks up an Array of String values with the given String key in a YAML Hash. If each value
-// /// is easily convertable to a String (is a Number or Boolean), `to_string()` will be called on it.
-// /// All other values are ignored.
-// pub fn yaml_hash_lookup_string_list(hash: &Hash, key: &str) -> Option<Vec<String>> {
-//   if let Some(value) = hash.get(&Yaml::String(key.to_string())) {
-//     if let Some(array) = value.as_vec() {
-//       Some(array.iter().flat_map(|value| {
-//         match value {
-//           Yaml::Real(s) => Some(s.clone()),
-//           Yaml::Integer(i) => Some(i.to_string()),
-//           Yaml::String(s) => Some(s.clone()),
-//           Yaml::Boolean(b) => Some(b.to_string()),
-//           _ => None
-//         }
-//       }).collect())
-//     } else {
-//       None
-//     }
-//   } else {
-//     None
-//   }
-// }
-//
+
+/// Looks up an Array of String values with the given key in a JSON Object. If each value
+/// is easily convertable to a String (is a Number or Boolean), `to_string()` will be called on it.
+/// All other values are ignored.
+pub fn json_object_lookup_string_list(map: &Map<String, Value>, key: &str) -> Option<Vec<String>> {
+  if let Some(value) = map.get(key) && let Some(array) = value.as_array() {
+    Some(array.iter().filter_map(|value| {
+      match value {
+        Value::Bool(b) => Some(b.to_string()),
+        Value::Number(n) => Some(n.to_string()),
+        Value::String(s) => Some(s.clone()),
+        _ => None
+      }
+    }).collect())
+  } else {
+    None
+  }
+}
+
 // /// Looks up the entry in the hash and converts it to JSON. If there is no entry with that key,
 // /// JSON Null is returned.
 // pub fn yaml_hash_entry_to_json(hash: &Hash, key: &str) -> anyhow::Result<Value> {
@@ -698,13 +693,7 @@ mod tests {
   //   wf.insert(Yaml::String("steps".to_string()), Yaml::Array(steps_fixture()));
   //   vec![Yaml::Hash(wf)]
   // }
-  //
-  // fn steps_fixture() -> Vec<Yaml> {
-  //   let mut desc = Hash::new();
-  //   desc.insert(Yaml::String("stepId".to_string()), Yaml::String("test".to_string()));
-  //   vec![Yaml::Hash(desc)]
-  // }
-  //
+
   // #[test]
   // fn info_supports_extensions() {
   //   let mut hash = Hash::new();
@@ -736,32 +725,39 @@ mod tests {
   //     "two".to_string() => AnyValue::Integer(2)
   //   }));
   // }
-  //
-  // #[test]
-  // fn workflow_fails_to_load_if_there_are_no_steps() {
-  //   let mut hash = Hash::new();
-  //   hash.insert(Yaml::String("workflowId".to_string()), Yaml::String("test".to_string()));
-  //
-  //   expect!(Workflow::try_from(&Yaml::Hash(hash.clone()))).to(be_err());
-  //
-  //   hash.insert(Yaml::String("steps".to_string()), Yaml::Array(vec![]));
-  //   expect!(Workflow::try_from(&Yaml::Hash(hash))).to(be_err());
-  // }
-  //
-  // #[test]
-  // fn workflow_supports_extensions() {
-  //   let mut hash = Hash::new();
-  //   hash.insert(Yaml::String("workflowId".to_string()), Yaml::String("test".to_string()));
-  //   hash.insert(Yaml::String("steps".to_string()), Yaml::Array(steps_fixture()));
-  //   hash.insert(Yaml::String("x-one".to_string()), Yaml::String("1".to_string()));
-  //   hash.insert(Yaml::String("x-two".to_string()), Yaml::Integer(2));
-  //
-  //   let wf = Workflow::try_from(&Yaml::Hash(hash)).unwrap();
-  //   expect!(wf.extensions).to(be_equal_to(hashmap!{
-  //     "one".to_string() => AnyValue::String("1".to_string()),
-  //     "two".to_string() => AnyValue::Integer(2)
-  //   }));
-  // }
+
+  #[test]
+  fn workflow_fails_to_load_if_there_are_no_steps() {
+    let json = json!({
+      "workflowId": "test"
+    });
+
+    expect!(Workflow::try_from(&json)).to(be_err());
+
+    let json = json!({
+      "workflowId": "test",
+      "steps": []
+    });
+    expect!(Workflow::try_from(&json)).to(be_err());
+  }
+
+  #[test]
+  fn workflow_supports_extensions() {
+    let json = json!({
+      "workflowId": "test",
+      "steps": [
+        { "stepId": "test" }
+      ],
+      "x-one": "1",
+      "x-two": 2
+    });
+
+    let wf = Workflow::try_from(&json).unwrap();
+    expect!(wf.extensions).to(be_equal_to(hashmap!{
+      "one".to_string() => AnyValue::String("1".to_string()),
+      "two".to_string() => AnyValue::UInteger(2)
+    }));
+  }
 
   #[test]
   fn steps_supports_extensions() {
@@ -908,59 +904,66 @@ mod tests {
     expect!(obj.value.clone()).to(be_none());
   }
 
-  // #[test]
-  // fn load_workflow_outputs() {
-  //   let mut outputs = Hash::new();
-  //   outputs.insert(Yaml::String("tokenExpires".to_string()), Yaml::String("$response.header.X-Expires-After".to_string()));
-  //   outputs.insert(Yaml::String("rateLimit".to_string()), Yaml::String("$response.header.X-Rate-Limit".to_string()));
-  //   outputs.insert(Yaml::String("invalid".to_string()), Yaml::Array(vec![]));
-  //
-  //   let mut hash = Hash::new();
-  //   hash.insert(Yaml::String("workflowId".to_string()), Yaml::String("test".to_string()));
-  //   hash.insert(Yaml::String("steps".to_string()), Yaml::Array(steps_fixture()));
-  //   hash.insert(Yaml::String("outputs".to_string()), Yaml::Hash(outputs));
-  //
-  //   let wf = Workflow::try_from(&Yaml::Hash(hash)).unwrap();
-  //   expect!(wf.outputs).to(be_equal_to(hashmap!{
-  //     "tokenExpires".to_string() => "$response.header.X-Expires-After".to_string(),
-  //     "rateLimit".to_string() => "$response.header.X-Rate-Limit".to_string()
-  //   }));
-  // }
-  //
-  // #[test]
-  // fn load_workflow_parameters() {
-  //   let mut parameter = Hash::new();
-  //   parameter.insert(Yaml::String("name".to_string()), Yaml::String("username".to_string()));
-  //   parameter.insert(Yaml::String("in".to_string()), Yaml::String("query".to_string()));
-  //   parameter.insert(Yaml::String("value".to_string()), Yaml::String("$inputs.username".to_string()));
-  //
-  //   let mut hash = Hash::new();
-  //   hash.insert(Yaml::String("workflowId".to_string()), Yaml::String("test".to_string()));
-  //   hash.insert(Yaml::String("steps".to_string()), Yaml::Array(steps_fixture()));
-  //   hash.insert(Yaml::String("parameters".to_string()), Yaml::Array(vec![Yaml::Hash(parameter)]));
-  //
-  //   let wf = Workflow::try_from(&Yaml::Hash(hash)).unwrap();
-  //   expect!(wf.parameters).to(be_equal_to(vec![
-  //     Either::Left(ParameterObject {
-  //       name: "username".to_string(),
-  //       r#in: Some("query".to_string()),
-  //       value: Either::Right("$inputs.username".to_string()),
-  //       extensions: Default::default()
-  //     })
-  //   ]));
-  //
-  //   let mut parameter_hash = Hash::new();
-  //   parameter_hash.insert(Yaml::String("name".to_string()), Yaml::String("username".to_string()));
-  //   parameter_hash.insert(Yaml::String("value".to_string()), Yaml::Integer(10));
-  //
-  //   let parameter = ParameterObject::try_from(&parameter_hash).unwrap();
-  //   expect!(parameter).to(be_equal_to(ParameterObject {
-  //     name: "username".to_string(),
-  //     r#in: None,
-  //     value: Either::Left(AnyValue::Integer(10)),
-  //     extensions: Default::default()
-  //   }));
-  // }
+  #[test]
+  fn load_workflow_outputs() {
+    let json = json!({
+      "workflowId": "test",
+      "steps": [
+        { "stepId": "test" }
+      ],
+      "outputs": {
+        "tokenExpires": "$response.header.X-Expires-After",
+        "rateLimit": "$response.header.X-Rate-Limit",
+        "invalid": []
+      }
+    });
+
+    let wf = Workflow::try_from(&json).unwrap();
+    expect!(wf.outputs).to(be_equal_to(hashmap!{
+      "tokenExpires".to_string() => "$response.header.X-Expires-After".to_string(),
+      "rateLimit".to_string() => "$response.header.X-Rate-Limit".to_string()
+    }));
+  }
+
+  #[test]
+  fn load_workflow_parameters() {
+    let json = json!({
+      "workflowId": "test",
+      "steps": [
+        { "stepId": "test" }
+      ],
+      "parameters": [
+        {
+          "name": "username",
+          "in": "query",
+          "value": "$inputs.username"
+        }
+      ]
+    });
+
+    let wf = Workflow::try_from(&json).unwrap();
+    expect!(wf.parameters).to(be_equal_to(vec![
+      Either::Left(ParameterObject {
+        name: "username".to_string(),
+        r#in: Some("query".to_string()),
+        value: Either::Right("$inputs.username".to_string()),
+        extensions: Default::default()
+      })
+    ]));
+
+    let json = json!({
+      "name": "username",
+      "value": 10
+    });
+
+    let parameter = ParameterObject::try_from(&json).unwrap();
+    expect!(parameter).to(be_equal_to(ParameterObject {
+      name: "username".to_string(),
+      r#in: None,
+      value: Either::Left(AnyValue::UInteger(10)),
+      extensions: Default::default()
+    }));
+  }
 
   #[test]
   fn parameter_object_supports_extensions() {
