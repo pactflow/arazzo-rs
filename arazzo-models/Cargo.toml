@@ -11,7 +11,8 @@ keywords = ["arazzo"]
 license = "Apache-2.0"
 
 [features]
-default = ["yaml"]
+default = ["json", "yaml"]
+json = []
 yaml = ["dep:yaml-rust2"]
 
 [dependencies]

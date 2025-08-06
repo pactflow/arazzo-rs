@@ -4,8 +4,10 @@ use std::collections::HashMap;
 
 #[cfg(feature = "yaml")] use anyhow::anyhow;
 #[cfg(feature = "yaml")] use maplit::hashmap;
+#[cfg(feature = "json")] use serde_json::{Map, Value};
 #[cfg(feature = "yaml")] use yaml_rust2::Yaml;
 #[cfg(feature = "yaml")] use yaml_rust2::yaml::Hash;
+
 #[cfg(feature = "yaml")] use crate::yaml::yaml_type_name;
 
 /// Enum to store a value of additional data
@@ -84,6 +86,60 @@ pub fn yaml_extract_extensions(hash: &Hash) -> anyhow::Result<HashMap<String, An
 
   for (k, v) in hash {
     if let Some(key) = k.as_str() && let Some(suffix) = key.strip_prefix("x-") {
+      extensions.insert(suffix.to_string(), v.try_into()?);
+    }
+  }
+
+  Ok(extensions)
+}
+
+#[cfg(feature = "json")]
+impl TryFrom<&Value> for AnyValue {
+  type Error = anyhow::Error;
+
+  fn try_from(value: &Value) -> Result<Self, Self::Error> {
+    match value {
+      Value::Null => Ok(AnyValue::Null),
+      Value::Bool(b) => Ok(AnyValue::Boolean(*b)),
+      Value::Number(n) => {
+        if let Some(uint) = n.as_u64() {
+          Ok(AnyValue::UInteger(uint))
+        } else if let Some(int) = n.as_i64() {
+          Ok(AnyValue::Integer(int))
+        } else {
+          Ok(AnyValue::Float(n.as_f64().unwrap_or_default()))
+        }
+      }
+      Value::String(s) => Ok(AnyValue::String(s.clone())),
+      Value::Array(a) => {
+        let mut array = vec![];
+
+        for value in a {
+          array.push(value.try_into()?);
+        }
+
+        Ok(AnyValue::Array(array))
+      }
+      Value::Object(o) => {
+        let mut map = hashmap!{};
+
+        for (k, value) in o {
+          map.insert(k.clone(), value.try_into()?);
+        }
+
+        Ok(AnyValue::Object(map))
+      }
+    }
+  }
+}
+
+/// Extracts all the extension values from the Object, stripping the `x-` suffix off.
+#[cfg(feature = "json")]
+pub fn json_extract_extensions(map: &Map<String, Value>) -> anyhow::Result<HashMap<String, AnyValue>> {
+  let mut extensions = hashmap!{};
+
+  for (k, v) in map {
+    if let Some(suffix) = k.strip_prefix("x-") {
       extensions.insert(suffix.to_string(), v.try_into()?);
     }
   }
