@@ -267,37 +267,40 @@ use crate::v1_0::{ArazzoDescription, Components, Criterion, CriterionExpressionT
 //     Ok(vec![])
 //   }
 // }
-//
-// impl TryFrom<&Hash> for ParameterObject {
-//   type Error = anyhow::Error;
-//
-//   fn try_from(value: &Hash) -> Result<Self, Self::Error> {
-//     Ok(ParameterObject {
-//       name: yaml_hash_require_string(value, "name")?,
-//       r#in: yaml_hash_lookup_string(value, "in"),
-//       value: yaml_load_parameter_value(value, "value")?,
-//       extensions: yaml_extract_extensions(value)?
-//     })
-//   }
-// }
-//
-// fn yaml_load_parameter_value(hash: &Hash, key: &str) -> anyhow::Result<Either<AnyValue, String>> {
-//   yaml_hash_lookup(hash, key, |v | {
-//     if let Some(s) = v.as_str() {
-//       if s.starts_with('$') {
-//         Some(Either::Right(s.to_string()))
-//       } else {
-//         Some(Either::Left(AnyValue::String(s.to_string())))
-//       }
-//     } else {
-//       AnyValue::try_from(v)
-//         .ok()
-//         .map(Either::Left)
-//     }
-//   }).ok_or_else(|| anyhow!("Parameter value is required [4.6.6.1 Fixed Fields]"))
-// }
-//
-//
+
+impl TryFrom<&Value> for ParameterObject {
+  type Error = anyhow::Error;
+
+  fn try_from(value: &Value) -> Result<Self, Self::Error> {
+    if let Some(map) = value.as_object() {
+      Ok(ParameterObject {
+        name: json_object_require_string(map, "name")?,
+        r#in: json_object_lookup_string(map, "in"),
+        value: json_load_parameter_value(map, "value")?,
+        extensions: json_extract_extensions(map)?
+      })
+    } else {
+      Err(anyhow!("JSON value must be an Object, got {:?}", value))
+    }
+  }
+}
+
+fn json_load_parameter_value(map: &Map<String, Value>, key: &str) -> anyhow::Result<Either<AnyValue, String>> {
+  if let Some(value) = map.get(key) {
+    if let Some(s) = value.as_str() {
+      if s.starts_with('$') {
+        Ok(Either::Right(s.to_string()))
+      } else {
+        Ok(Either::Left(AnyValue::String(s.to_string())))
+      }
+    } else {
+      AnyValue::try_from(value).map(Either::Left)
+    }
+  } else {
+    Err(anyhow!("Parameter value is required [4.6.6.1 Fixed Fields]"))
+  }
+}
+
 // impl TryFrom<&Hash> for SuccessObject {
 //   type Error = anyhow::Error;
 //
@@ -341,21 +344,25 @@ use crate::v1_0::{ArazzoDescription, Components, Criterion, CriterionExpressionT
 //     }
 //   }
 // }
-//
-// impl TryFrom<&Hash> for ReusableObject {
-//   type Error = anyhow::Error;
-//
-//   fn try_from(value: &Hash) -> Result<Self, Self::Error> {
-//     if let Ok(reference) = yaml_hash_require_string(value, "reference") {
-//       Ok(ReusableObject {
-//         reference,
-//         value: yaml_hash_lookup_string(value, "value")
-//       })
-//     } else {
-//       Err(anyhow!("Reference is required [4.6.10.1 Fixed Fields]"))
-//     }
-//   }
-// }
+
+impl TryFrom<&Value> for ReusableObject {
+  type Error = anyhow::Error;
+
+  fn try_from(value: &Value) -> Result<Self, Self::Error> {
+    if let Some(map) = value.as_object() {
+      if let Ok(reference) = json_object_require_string(map, "reference") {
+        Ok(ReusableObject {
+          reference,
+          value: json_object_lookup_string(map, "value")
+        })
+      } else {
+        Err(anyhow!("Reference is required [4.6.10.1 Fixed Fields]"))
+      }
+    } else {
+      Err(anyhow!("JSON value must be an Object, got {:?}", value))
+    }
+  }
+}
 
 impl TryFrom<&Value> for Criterion {
   type Error = anyhow::Error;
@@ -842,26 +849,28 @@ mod tests {
   //     "two".to_string() => AnyValue::Integer(2)
   //   }));
   // }
-  //
-  // #[test]
-  // fn load_reusable_object() {
-  //   let mut hash = Hash::new();
-  //   hash.insert(Yaml::String("reference".to_string()), Yaml::String("$test".to_string()));
-  //   hash.insert(Yaml::String("value".to_string()), Yaml::String("test".to_string()));
-  //   hash.insert(Yaml::String("workflowId".to_string()), Yaml::String("workflowId".to_string()));
-  //
-  //   let obj = ReusableObject::try_from(&hash).unwrap();
-  //   expect!(&obj.reference).to(be_equal_to("$test"));
-  //   expect!(obj.value.clone()).to(be_some().value("test"));
-  //
-  //   let mut hash = Hash::new();
-  //   hash.insert(Yaml::String("reference".to_string()), Yaml::String("$test".to_string()));
-  //
-  //   let obj = ReusableObject::try_from(&hash).unwrap();
-  //   expect!(&obj.reference).to(be_equal_to("$test"));
-  //   expect!(obj.value.clone()).to(be_none());
-  // }
-  //
+
+  #[test]
+  fn load_reusable_object() {
+    let json = json!({
+      "reference": "$test",
+      "value": "test",
+      "workflowId": "workflowId"
+    });
+
+    let obj = ReusableObject::try_from(&json).unwrap();
+    expect!(&obj.reference).to(be_equal_to("$test"));
+    expect!(obj.value.clone()).to(be_some().value("test"));
+
+    let json = json!({
+      "reference": "$test"
+    });
+
+    let obj = ReusableObject::try_from(&json).unwrap();
+    expect!(&obj.reference).to(be_equal_to("$test"));
+    expect!(obj.value.clone()).to(be_none());
+  }
+
   // #[test]
   // fn load_workflow_outputs() {
   //   let mut outputs = Hash::new();
@@ -915,22 +924,23 @@ mod tests {
   //     extensions: Default::default()
   //   }));
   // }
-  //
-  // #[test]
-  // fn parameter_object_supports_extensions() {
-  //   let mut hash = Hash::new();
-  //   hash.insert(Yaml::String("name".to_string()), Yaml::String("username".to_string()));
-  //   hash.insert(Yaml::String("value".to_string()), Yaml::Integer(10));
-  //   hash.insert(Yaml::String("x-one".to_string()), Yaml::String("1".to_string()));
-  //   hash.insert(Yaml::String("x-two".to_string()), Yaml::Integer(2));
-  //
-  //   let parameter = ParameterObject::try_from(&hash).unwrap();
-  //   expect!(parameter.extensions).to(be_equal_to(hashmap!{
-  //     "one".to_string() => AnyValue::String("1".to_string()),
-  //     "two".to_string() => AnyValue::Integer(2)
-  //   }));
-  // }
-  //
+
+  #[test]
+  fn parameter_object_supports_extensions() {
+    let json = json!({
+      "name": "username",
+      "value": 10,
+      "x-one": "1",
+      "x-two": 2
+    });
+
+    let parameter = ParameterObject::try_from(&json).unwrap();
+    expect!(parameter.extensions).to(be_equal_to(hashmap!{
+      "one".to_string() => AnyValue::String("1".to_string()),
+      "two".to_string() => AnyValue::UInteger(2)
+    }));
+  }
+
   // #[test]
   // fn load_step_parameters() {
   //   let mut parameter = Hash::new();
