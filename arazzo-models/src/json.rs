@@ -17,6 +17,7 @@ use crate::v1_0::{ArazzoDescription, Components, Criterion, CriterionExpressionT
 //     if let Some(hash) = value.as_object() {
 //       if let Ok(version) = json_object_require_string(hash, "arazzo") {
 //         let info = Info::try_from(hash)?;
+//          Err(anyhow!("Info Object is required [4.6.1.1 Fixed Fields]"))
 //         let source_descriptions = json_load_source_descriptions(hash)?;
 //         let workflows = json_load_workflows(hash)?;
 //         let components = Components::try_from(hash)?;
@@ -38,23 +39,23 @@ use crate::v1_0::{ArazzoDescription, Components, Criterion, CriterionExpressionT
 //   }
 // }
 
-// impl TryFrom<&Yaml> for SourceDescription {
-//   type Error = anyhow::Error;
-//
-//   fn try_from(value: &Yaml) -> Result<Self, Self::Error> {
-//     if let Some(hash) = value.as_hash() {
-//       Ok(SourceDescription {
-//         name: yaml_hash_require_string(&hash, "name")?,
-//         url: yaml_hash_require_string(&hash, "url")?,
-//         r#type: yaml_hash_lookup_string(&hash, "type"),
-//         extensions: yaml_extract_extensions(&hash)?
-//       })
-//     } else {
-//       Err(anyhow!("YAML value must be a Hash, got {}", yaml_type_name(value)))
-//     }
-//   }
-// }
-//
+impl TryFrom<&Value> for SourceDescription {
+  type Error = anyhow::Error;
+
+  fn try_from(value: &Value) -> Result<Self, Self::Error> {
+    if let Some(map) = value.as_object() {
+      Ok(SourceDescription {
+        name: json_object_require_string(&map, "name")?,
+        url: json_object_require_string(&map, "url")?,
+        r#type: json_object_lookup_string(&map, "type"),
+        extensions: json_extract_extensions(&map)?
+      })
+    } else {
+      Err(anyhow!("JSON value must be an Object, got {:?}", value))
+    }
+  }
+}
+
 // fn yaml_load_source_descriptions(hash: &Hash) -> anyhow::Result<Vec<SourceDescription>> {
 //   if let Some(array) = yaml_hash_lookup(hash, "sourceDescriptions", |v | v.as_vec().cloned()) {
 //     if array.is_empty() {
@@ -72,25 +73,25 @@ use crate::v1_0::{ArazzoDescription, Components, Criterion, CriterionExpressionT
 //     Err(anyhow!("Source Description Object is required [4.6.1.1 Fixed Fields]"))
 //   }
 // }
-//
-// impl TryFrom<&Hash> for Info {
-//   type Error = anyhow::Error;
-//
-//   fn try_from(value: &Hash) -> Result<Self, Self::Error> {
-//     if let Some(hash) = yaml_hash_lookup(value, "info", |v | v.as_hash().cloned()) {
-//       Ok(Info {
-//         title: yaml_hash_require_string(&hash, "title")?,
-//         summary: yaml_hash_lookup_string(&hash, "summary"),
-//         description: yaml_hash_lookup_string(&hash, "description"),
-//         version: yaml_hash_require_string(&hash, "version")?,
-//         extensions: yaml_extract_extensions(&hash)?
-//       })
-//     } else {
-//       Err(anyhow!("Info Object is required [4.6.1.1 Fixed Fields]"))
-//     }
-//   }
-// }
-//
+
+impl TryFrom<&Value> for Info {
+  type Error = anyhow::Error;
+
+  fn try_from(value: &Value) -> Result<Self, Self::Error> {
+    if let Some(map) = value.as_object() {
+      Ok(Info {
+        title: json_object_require_string(&map, "title")?,
+        summary: json_object_lookup_string(&map, "summary"),
+        description: json_object_lookup_string(&map, "description"),
+        version: json_object_require_string(&map, "version")?,
+        extensions: json_extract_extensions(&map)?
+      })
+    } else {
+      Err(anyhow!("JSON value must be an Object, got {:?}", value))
+    }
+  }
+}
+
 // fn yaml_load_workflows(hash: &Hash) -> anyhow::Result<Vec<Workflow>> {
 //   if let Some(array) = yaml_hash_lookup(hash, "workflows", |v | v.as_vec().cloned()) {
 //     if array.is_empty() {
@@ -540,19 +541,6 @@ pub fn json_object_require_string(map: &Map<String, Value>, key: &str) -> anyhow
   }
 }
 
-// /// Looks up a String key in the given hash, calling the provided callback if it is found.
-// pub fn yaml_hash_lookup<F, U>(
-//   hash: &Hash,
-//   key: &str,
-//   callback: F
-// ) -> Option<U> where F: FnOnce(&Yaml) -> Option<U> {
-//   if let Some(value) = hash.get(&Yaml::String(key.to_string())) {
-//     callback(value)
-//   } else {
-//     None
-//   }
-// }
-
 /// Looks up an Array of String values with the given key in a JSON Object. If each value
 /// is easily convertable to a String (is a Number or Boolean), `to_string()` will be called on it.
 /// All other values are ignored.
@@ -570,16 +558,6 @@ pub fn json_object_lookup_string_list(map: &Map<String, Value>, key: &str) -> Op
     None
   }
 }
-
-// /// Looks up the entry in the hash and converts it to JSON. If there is no entry with that key,
-// /// JSON Null is returned.
-// pub fn yaml_hash_entry_to_json(hash: &Hash, key: &str) -> anyhow::Result<Value> {
-//   if let Some(value) = hash.get(&Yaml::String(key.to_string())) {
-//     yaml_to_json(value)
-//   } else {
-//     Ok(Value::Null)
-//   }
-// }
 
 #[cfg(test)]
 mod tests {
@@ -694,37 +672,37 @@ mod tests {
   //   vec![Yaml::Hash(wf)]
   // }
 
-  // #[test]
-  // fn info_supports_extensions() {
-  //   let mut hash = Hash::new();
-  //   hash.insert(Yaml::String("title".to_string()), Yaml::String("test".to_string()));
-  //   hash.insert(Yaml::String("version".to_string()), Yaml::String("1.0.0".to_string()));
-  //   hash.insert(Yaml::String("x-one".to_string()), Yaml::String("1".to_string()));
-  //   hash.insert(Yaml::String("x-two".to_string()), Yaml::Integer(2));
-  //
-  //   let mut outer = Hash::new();
-  //   outer.insert(Yaml::String("info".to_string()), Yaml::Hash(hash));
-  //   let info = Info::try_from(&outer).unwrap();
-  //   expect!(info.extensions).to(be_equal_to(hashmap!{
-  //     "one".to_string() => AnyValue::String("1".to_string()),
-  //     "two".to_string() => AnyValue::Integer(2)
-  //   }));
-  // }
-  //
-  // #[test]
-  // fn source_description_supports_extensions() {
-  //   let mut hash = Hash::new();
-  //   hash.insert(Yaml::String("name".to_string()), Yaml::String("test".to_string()));
-  //   hash.insert(Yaml::String("url".to_string()), Yaml::String("test".to_string()));
-  //   hash.insert(Yaml::String("x-one".to_string()), Yaml::String("1".to_string()));
-  //   hash.insert(Yaml::String("x-two".to_string()), Yaml::Integer(2));
-  //
-  //   let desc = SourceDescription::try_from(&Yaml::Hash(hash)).unwrap();
-  //   expect!(desc.extensions).to(be_equal_to(hashmap!{
-  //     "one".to_string() => AnyValue::String("1".to_string()),
-  //     "two".to_string() => AnyValue::Integer(2)
-  //   }));
-  // }
+  #[test]
+  fn info_supports_extensions() {
+    let json = json!({
+      "title": "test",
+      "version": "1.0.0",
+      "x-one": "1",
+      "x-two": 2
+    });
+
+    let info = Info::try_from(&json).unwrap();
+    expect!(info.extensions).to(be_equal_to(hashmap!{
+      "one".to_string() => AnyValue::String("1".to_string()),
+      "two".to_string() => AnyValue::UInteger(2)
+    }));
+  }
+
+  #[test]
+  fn source_description_supports_extensions() {
+    let json = json!({
+      "name": "test",
+      "url": "test",
+      "x-one": "1",
+      "x-two": 2
+    });
+
+    let desc = SourceDescription::try_from(&json).unwrap();
+    expect!(desc.extensions).to(be_equal_to(hashmap!{
+      "one".to_string() => AnyValue::String("1".to_string()),
+      "two".to_string() => AnyValue::UInteger(2)
+    }));
+  }
 
   #[test]
   fn workflow_fails_to_load_if_there_are_no_steps() {
