@@ -135,6 +135,11 @@ fn loads_the_main_spec_descriptors() {
       extensions: Default::default()
     })
   ]));
+  expect!(step1.outputs.clone()).to(be_equal_to(hashmap!{
+    "sessionToken".to_string() => "$response.body".to_string(),
+    "tokenExpires".to_string() => "$response.header.X-Expires-After".to_string(),
+    "rateLimit".to_string() => "$response.header.X-Rate-Limit".to_string()
+  }));
 
   let step2 = steps[1].clone();
   expect!(step2.step_id).to(be_equal_to("getPetStep"));
@@ -156,4 +161,7 @@ fn loads_the_main_spec_descriptors() {
       extensions: Default::default()
     })
   ]));
+  expect!(step2.outputs.clone()).to(be_equal_to(hashmap!{
+    "availablePets".to_string() => "$response.body".to_string()
+  }));
 }

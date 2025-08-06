@@ -249,6 +249,12 @@ pub struct Step {
   pub parameters: Vec<Either<ParameterObject, ReusableObject>>,
   /// Request body to pass to an operation as referenced by operationId or operationPath.
   pub request_body: Option<RequestBody>,
+  /// Array of success action objects that specify what to do upon step success.
+  pub on_success: Vec<Either<SuccessObject, ReusableObject>>,
+  /// Array of failure action objects that specify what to do upon step failure.
+  pub on_failure: Vec<Either<FailureObject, ReusableObject>>,
+  /// Defined outputs of the step.
+  pub outputs: HashMap<String, String>,
   /// Extension values
   pub extensions: HashMap<String, AnyValue>
 }
@@ -287,6 +293,9 @@ impl TryFrom<&Yaml> for Step {
         parameters: yaml_load_parameters(hash)?,
         request_body: yaml_hash_lookup(hash, "requestBody", |v| Some(RequestBody::try_from(v)))
           .transpose()?,
+        on_success: yaml_load_success_actions(hash)?,
+        on_failure: yaml_load_failure_actions(hash)?,
+        outputs: yaml_load_outputs(hash),
         extensions: yaml_extract_extensions(&hash)?
       })
     } else {
