@@ -301,36 +301,44 @@ fn json_load_parameter_value(map: &Map<String, Value>, key: &str) -> anyhow::Res
   }
 }
 
-// impl TryFrom<&Hash> for SuccessObject {
-//   type Error = anyhow::Error;
-//
-//   fn try_from(value: &Hash) -> Result<Self, Self::Error> {
-//     Ok(SuccessObject {
-//       name: yaml_hash_require_string(value, "name")?,
-//       r#type: yaml_hash_require_string(value, "type")?,
-//       workflow_id: yaml_hash_lookup_string(value, "workflowId"),
-//       step_id: yaml_hash_lookup_string(value, "stepId"),
-//       extensions: yaml_extract_extensions(value)?
-//     })
-//   }
-// }
-//
-// impl TryFrom<&Hash> for FailureObject {
-//   type Error = anyhow::Error;
-//
-//   fn try_from(value: &Hash) -> Result<Self, Self::Error> {
-//     Ok(FailureObject {
-//       name: yaml_hash_require_string(value, "name")?,
-//       r#type: yaml_hash_require_string(value, "type")?,
-//       workflow_id: yaml_hash_lookup_string(value, "workflowId"),
-//       step_id: yaml_hash_lookup_string(value, "stepId"),
-//       retry_after: yaml_hash_lookup_number(value, "retryAfter"),
-//       retry_limit: yaml_hash_lookup_integer(value, "retryLimit"),
-//       extensions: yaml_extract_extensions(value)?
-//     })
-//   }
-// }
-//
+impl TryFrom<&Value> for SuccessObject {
+  type Error = anyhow::Error;
+
+  fn try_from(value: &Value) -> Result<Self, Self::Error> {
+    if let Some(map) = value.as_object() {
+      Ok(SuccessObject {
+        name: json_object_require_string(map, "name")?,
+        r#type: json_object_require_string(map, "type")?,
+        workflow_id: json_object_lookup_string(map, "workflowId"),
+        step_id: json_object_lookup_string(map, "stepId"),
+        extensions: json_extract_extensions(map)?
+      })
+    } else {
+      Err(anyhow!("JSON value must be an Object, got {:?}", value))
+    }
+  }
+}
+
+impl TryFrom<&Value> for FailureObject {
+  type Error = anyhow::Error;
+
+  fn try_from(value: &Value) -> Result<Self, Self::Error> {
+    if let Some(map) = value.as_object() {
+      Ok(FailureObject {
+        name: json_object_require_string(map, "name")?,
+        r#type: json_object_require_string(map, "type")?,
+        workflow_id: json_object_lookup_string(map, "workflowId"),
+        step_id: json_object_lookup_string(map, "stepId"),
+        retry_after: json_object_lookup_number(map, "retryAfter"),
+        retry_limit: json_object_lookup_integer(map, "retryLimit"),
+        extensions: json_extract_extensions(map)?
+      })
+    } else {
+      Err(anyhow!("JSON value must be an Object, got {:?}", value))
+    }
+  }
+}
+
 // impl TryFrom<&Hash> for Components {
 //   type Error = anyhow::Error;
 //
@@ -468,33 +476,47 @@ pub fn json_object_lookup_string(map: &Map<String, Value>, key: &str) -> Option<
   }
 }
 
-// /// Looks up a numeric value with the given String key in a YAML Hash. If the value is an integer
-// /// it will be converted to a double.
-// pub fn yaml_hash_lookup_number(hash: &Hash, key: &str) -> Option<f64> {
-//   if let Some(value) = hash.get(&Yaml::String(key.to_string())) {
-//     match value {
-//       Yaml::Real(f) => f.parse::<f64>().ok(),
-//       Yaml::Integer(i) => Some(*i as f64),
-//       _ => None
-//     }
-//   } else {
-//     None
-//   }
-// }
-//
-// /// Looks up an integer value with the given String key in a YAML Hash. If the value is a float
-// /// it will be converted to an integer.
-// pub fn yaml_hash_lookup_integer(hash: &Hash, key: &str) -> Option<i64> {
-//   if let Some(value) = hash.get(&Yaml::String(key.to_string())) {
-//     match value {
-//       Yaml::Real(f) => f.parse::<f64>().ok().map(|f| f as i64),
-//       Yaml::Integer(i) => Some(*i),
-//       _ => None
-//     }
-//   } else {
-//     None
-//   }
-// }
+/// Looks up a numeric value with the given key in an Object. If the value is an integer
+/// it will be converted to a double.
+pub fn json_object_lookup_number(map: &Map<String, Value>, key: &str) -> Option<f64> {
+  if let Some(value) = map.get(key) {
+    match value {
+      Value::Number(n) => {
+        if let Some(uint) = n.as_u64() {
+          Some(uint as f64)
+        } else if let Some(int) = n.as_i64() {
+          Some(int as f64)
+        } else {
+          n.as_f64()
+        }
+      },
+      _ => None
+    }
+  } else {
+    None
+  }
+}
+
+/// Looks up an integer value with the given key in an Object. If the value is a float
+/// it will be converted to an integer.
+pub fn json_object_lookup_integer(map: &Map<String, Value>, key: &str) -> Option<i64> {
+  if let Some(value) = map.get(key) {
+    match value {
+      Value::Number(n) => {
+        if let Some(uint) = n.as_u64() {
+          Some(uint as i64)
+        } else if let Some(int) = n.as_i64() {
+          Some(int)
+        } else {
+          n.as_f64().map(|f| f as i64)
+        }
+      },
+      _ => None
+    }
+  } else {
+    None
+  }
+}
 
 /// Looks up a required String value with the given key in a JSON Object. If the key does
 /// not exist, or the resulting value is not a String, an Error is returned.
@@ -763,92 +785,98 @@ mod tests {
   //     "two".to_string() => AnyValue::Integer(2)
   //   }));
   // }
-  //
-  // #[test]
-  // fn load_success_object() {
-  //   let mut hash = Hash::new();
-  //   hash.insert(Yaml::String("name".to_string()), Yaml::String("test".to_string()));
-  //   hash.insert(Yaml::String("type".to_string()), Yaml::String("end".to_string()));
-  //   hash.insert(Yaml::String("workflowId".to_string()), Yaml::String("workflowId".to_string()));
-  //   hash.insert(Yaml::String("stepId".to_string()), Yaml::String("stepId".to_string()));
-  //
-  //   let success = SuccessObject::try_from(&hash).unwrap();
-  //   expect!(&success.name).to(be_equal_to("test"));
-  //   expect!(&success.r#type).to(be_equal_to("end"));
-  //   expect!(success.workflow_id.clone()).to(be_some().value("workflowId"));
-  //   expect!(success.step_id.clone()).to(be_some().value("stepId"));
-  //
-  //   let mut hash = Hash::new();
-  //   hash.insert(Yaml::String("name".to_string()), Yaml::String("test".to_string()));
-  //   hash.insert(Yaml::String("type".to_string()), Yaml::String("end".to_string()));
-  //
-  //   let success = SuccessObject::try_from(&hash).unwrap();
-  //   expect!(&success.name).to(be_equal_to("test"));
-  //   expect!(&success.r#type).to(be_equal_to("end"));
-  //   expect!(success.workflow_id.clone()).to(be_none());
-  //   expect!(success.step_id.clone()).to(be_none());
-  // }
-  //
-  // #[test]
-  // fn success_object_supports_extensions() {
-  //   let mut hash = Hash::new();
-  //   hash.insert(Yaml::String("name".to_string()), Yaml::String("test".to_string()));
-  //   hash.insert(Yaml::String("type".to_string()), Yaml::String("end".to_string()));
-  //   hash.insert(Yaml::String("x-one".to_string()), Yaml::String("1".to_string()));
-  //   hash.insert(Yaml::String("x-two".to_string()), Yaml::Integer(2));
-  //
-  //   let success = SuccessObject::try_from(&hash).unwrap();
-  //   expect!(success.extensions).to(be_equal_to(hashmap!{
-  //     "one".to_string() => AnyValue::String("1".to_string()),
-  //     "two".to_string() => AnyValue::Integer(2)
-  //   }));
-  // }
-  //
-  // #[test]
-  // fn load_failure_object() {
-  //   let mut hash = Hash::new();
-  //   hash.insert(Yaml::String("name".to_string()), Yaml::String("test".to_string()));
-  //   hash.insert(Yaml::String("type".to_string()), Yaml::String("end".to_string()));
-  //   hash.insert(Yaml::String("workflowId".to_string()), Yaml::String("workflowId".to_string()));
-  //   hash.insert(Yaml::String("stepId".to_string()), Yaml::String("stepId".to_string()));
-  //   hash.insert(Yaml::String("retryAfter".to_string()), Yaml::Real("10.5".to_string()));
-  //   hash.insert(Yaml::String("retryLimit".to_string()), Yaml::Integer(10));
-  //
-  //   let failure = FailureObject::try_from(&hash).unwrap();
-  //   expect!(&failure.name).to(be_equal_to("test"));
-  //   expect!(&failure.r#type).to(be_equal_to("end"));
-  //   expect!(failure.workflow_id.clone()).to(be_some().value("workflowId"));
-  //   expect!(failure.step_id.clone()).to(be_some().value("stepId"));
-  //   expect!(failure.retry_after.clone()).to(be_some().value(10.5));
-  //   expect!(failure.retry_limit.clone()).to(be_some().value(10));
-  //
-  //   let mut hash = Hash::new();
-  //   hash.insert(Yaml::String("name".to_string()), Yaml::String("test".to_string()));
-  //   hash.insert(Yaml::String("type".to_string()), Yaml::String("end".to_string()));
-  //
-  //   let failure = FailureObject::try_from(&hash).unwrap();
-  //   expect!(&failure.name).to(be_equal_to("test"));
-  //   expect!(&failure.r#type).to(be_equal_to("end"));
-  //   expect!(failure.workflow_id.clone()).to(be_none());
-  //   expect!(failure.step_id.clone()).to(be_none());
-  //   expect!(failure.retry_after.clone()).to(be_none());
-  //   expect!(failure.retry_limit.clone()).to(be_none());
-  // }
-  //
-  // #[test]
-  // fn failure_object_supports_extensions() {
-  //   let mut hash = Hash::new();
-  //   hash.insert(Yaml::String("name".to_string()), Yaml::String("test".to_string()));
-  //   hash.insert(Yaml::String("type".to_string()), Yaml::String("end".to_string()));
-  //   hash.insert(Yaml::String("x-one".to_string()), Yaml::String("1".to_string()));
-  //   hash.insert(Yaml::String("x-two".to_string()), Yaml::Integer(2));
-  //
-  //   let failure = FailureObject::try_from(&hash).unwrap();
-  //   expect!(failure.extensions).to(be_equal_to(hashmap!{
-  //     "one".to_string() => AnyValue::String("1".to_string()),
-  //     "two".to_string() => AnyValue::Integer(2)
-  //   }));
-  // }
+
+  #[test]
+  fn load_success_object() {
+    let json = json!({
+      "name": "test",
+      "type": "end",
+      "workflowId": "workflowId",
+      "stepId": "stepId"
+    });
+
+    let success = SuccessObject::try_from(&json).unwrap();
+    expect!(&success.name).to(be_equal_to("test"));
+    expect!(&success.r#type).to(be_equal_to("end"));
+    expect!(success.workflow_id.clone()).to(be_some().value("workflowId"));
+    expect!(success.step_id.clone()).to(be_some().value("stepId"));
+
+    let json = json!({
+      "name": "test",
+      "type": "end"
+    });
+
+    let success = SuccessObject::try_from(&json).unwrap();
+    expect!(&success.name).to(be_equal_to("test"));
+    expect!(&success.r#type).to(be_equal_to("end"));
+    expect!(success.workflow_id.clone()).to(be_none());
+    expect!(success.step_id.clone()).to(be_none());
+  }
+
+  #[test]
+  fn success_object_supports_extensions() {
+    let json = json!({
+      "name": "test",
+      "type": "end",
+      "x-one": "1",
+      "x-two": 2
+    });
+
+    let success = SuccessObject::try_from(&json).unwrap();
+    expect!(success.extensions).to(be_equal_to(hashmap!{
+      "one".to_string() => AnyValue::String("1".to_string()),
+      "two".to_string() => AnyValue::UInteger(2)
+    }));
+  }
+
+  #[test]
+  fn load_failure_object() {
+    let json = json!({
+      "name": "test",
+      "type": "end",
+      "workflowId": "workflowId",
+      "stepId": "stepId",
+      "retryAfter": 10.5,
+      "retryLimit": 10
+    });
+
+    let failure = FailureObject::try_from(&json).unwrap();
+    expect!(&failure.name).to(be_equal_to("test"));
+    expect!(&failure.r#type).to(be_equal_to("end"));
+    expect!(failure.workflow_id.clone()).to(be_some().value("workflowId"));
+    expect!(failure.step_id.clone()).to(be_some().value("stepId"));
+    expect!(failure.retry_after.clone()).to(be_some().value(10.5));
+    expect!(failure.retry_limit.clone()).to(be_some().value(10));
+
+    let json = json!({
+      "name": "test",
+      "type": "end"
+    });
+
+    let failure = FailureObject::try_from(&json).unwrap();
+    expect!(&failure.name).to(be_equal_to("test"));
+    expect!(&failure.r#type).to(be_equal_to("end"));
+    expect!(failure.workflow_id.clone()).to(be_none());
+    expect!(failure.step_id.clone()).to(be_none());
+    expect!(failure.retry_after.clone()).to(be_none());
+    expect!(failure.retry_limit.clone()).to(be_none());
+  }
+
+  #[test]
+  fn failure_object_supports_extensions() {
+    let json = json!({
+      "name": "test",
+      "type": "end",
+      "x-one": "1",
+      "x-two": 2
+    });
+
+    let failure = FailureObject::try_from(&json).unwrap();
+    expect!(failure.extensions).to(be_equal_to(hashmap!{
+      "one".to_string() => AnyValue::String("1".to_string()),
+      "two".to_string() => AnyValue::UInteger(2)
+    }));
+  }
 
   #[test]
   fn load_reusable_object() {
