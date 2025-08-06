@@ -5,7 +5,7 @@ use itertools::Either;
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::rc::Rc;
-
+use maplit::hashmap;
 use crate::extensions::{json_extract_extensions, yaml_extract_extensions, AnyValue};
 use crate::payloads::{EmptyPayload, JsonPayload, Payload, StringPayload};
 use crate::v1_0::{ArazzoDescription, Components, Criterion, CriterionExpressionType, FailureObject, Info, ParameterObject, RequestBody, ReusableObject, SourceDescription, Step, SuccessObject, Workflow};
@@ -150,123 +150,127 @@ use crate::v1_0::{ArazzoDescription, Components, Criterion, CriterionExpressionT
 //     Err(anyhow!("At lest one Step is required [4.6.4.1 Fixed Fields]"))
 //   }
 // }
-//
-// fn yaml_load_parameters(hash: &Hash) -> anyhow::Result<Vec<Either<ParameterObject, ReusableObject>>> {
-//   if let Some(array) = yaml_hash_lookup(hash, "parameters", |v | v.as_vec().cloned()) {
-//     let mut list = vec![];
-//
-//     for item in &array {
-//       if let Some(hash) = item.as_hash() {
-//         if hash.contains_key(&Yaml::String("reference".to_string())) {
-//           list.push(Either::Right(ReusableObject::try_from(hash)?));
-//         } else {
-//           list.push(Either::Left(ParameterObject::try_from(hash)?));
-//         }
-//       }
-//     }
-//
-//     Ok(list)
-//   } else {
-//     Ok(vec![])
-//   }
-// }
-//
-// fn yaml_load_success_actions(hash: &Hash) -> anyhow::Result<Vec<Either<SuccessObject, ReusableObject>>> {
-//   if let Some(array) = yaml_hash_lookup(hash, "successActions", |v | v.as_vec().cloned()) {
-//     let mut list = vec![];
-//
-//     for item in &array {
-//       if let Some(hash) = item.as_hash() {
-//         if hash.contains_key(&Yaml::String("reference".to_string())) {
-//           list.push(Either::Right(ReusableObject::try_from(hash)?));
-//         } else {
-//           list.push(Either::Left(SuccessObject::try_from(hash)?));
-//         }
-//       }
-//     }
-//
-//     Ok(list)
-//   } else {
-//     Ok(vec![])
-//   }
-// }
-//
-// fn yaml_load_failure_actions(hash: &Hash) -> anyhow::Result<Vec<Either<FailureObject, ReusableObject>>> {
-//   if let Some(array) = yaml_hash_lookup(hash, "failureActions", |v | v.as_vec().cloned()) {
-//     let mut list = vec![];
-//
-//     for item in &array {
-//       if let Some(hash) = item.as_hash() {
-//         if hash.contains_key(&Yaml::String("reference".to_string())) {
-//           list.push(Either::Right(ReusableObject::try_from(hash)?));
-//         } else {
-//           list.push(Either::Left(FailureObject::try_from(hash)?));
-//         }
-//       }
-//     }
-//
-//     Ok(list)
-//   } else {
-//     Ok(vec![])
-//   }
-// }
-//
-// fn yaml_load_outputs(hash: &Hash) -> HashMap<String, String> {
-//   yaml_hash_lookup(hash, "outputs", |v | {
-//     if let Some(outputs_hash) = v.as_hash() {
-//       Some(outputs_hash.iter()
-//         .filter_map(|(k, v)| {
-//           if let Some(key) = k.as_str() {
-//             v.as_str().map(|value| (key.to_string(), value.to_string()))
-//           } else {
-//             None
-//           }
-//         }).collect())
-//     } else {
-//       None
-//     }
-//   }).unwrap_or_default()
-// }
-//
-// impl TryFrom<&Yaml> for Step {
-//   type Error = anyhow::Error;
-//
-//   fn try_from(value: &Yaml) -> Result<Self, Self::Error> {
-//     if let Some(hash) = value.as_hash() {
-//       Ok(Step {
-//         step_id: yaml_hash_require_string(&hash, "stepId")?,
-//         operation_id: yaml_hash_lookup_string(&hash, "operationId"),
-//         operation_path: yaml_hash_lookup_string(&hash, "operationPath"),
-//         workflow_id: yaml_hash_lookup_string(&hash, "workflowId"),
-//         description: yaml_hash_lookup_string(&hash, "description"),
-//         parameters: yaml_load_parameters(hash)?,
-//         request_body: yaml_hash_lookup(hash, "requestBody", |v| Some(RequestBody::try_from(v)))
-//           .transpose()?,
-//         on_success: yaml_load_success_actions(hash)?,
-//         success_criteria: yaml_load_success_criteria(hash)?,
-//         on_failure: yaml_load_failure_actions(hash)?,
-//         outputs: yaml_load_outputs(hash),
-//         extensions: yaml_extract_extensions(&hash)?
-//       })
-//     } else {
-//       Err(anyhow!("YAML value must be a Hash, got {}", yaml_type_name(value)))
-//     }
-//   }
-// }
-//
-// fn yaml_load_success_criteria(hash: &Hash) -> anyhow::Result<Vec<Criterion>> {
-//   if let Some(criteria) = yaml_hash_lookup(hash, "successCriteria", |v | v.as_vec().cloned()) {
-//     let mut result = vec![];
-//
-//     for value in &criteria {
-//       result.push(Criterion::try_from(value)?);
-//     }
-//
-//     Ok(result)
-//   } else {
-//     Ok(vec![])
-//   }
-// }
+
+fn json_load_parameters(map: &Map<String, Value>) -> anyhow::Result<Vec<Either<ParameterObject, ReusableObject>>> {
+  if let Some(array) = map.get("parameters") {
+    let mut list = vec![];
+
+    if let Some(array) = array.as_array() {
+      for item in array {
+        if let Some(map) = item.as_object() {
+          if map.contains_key("reference") {
+            list.push(Either::Right(ReusableObject::try_from(item)?));
+          } else {
+            list.push(Either::Left(ParameterObject::try_from(item)?));
+          }
+        }
+      }
+    }
+
+    Ok(list)
+  } else {
+    Ok(vec![])
+  }
+}
+
+fn json_load_success_actions(map: &Map<String, Value>) -> anyhow::Result<Vec<Either<SuccessObject, ReusableObject>>> {
+  if let Some(array) = map.get("successActions") {
+    let mut list = vec![];
+
+    if let Some(array) = array.as_array() {
+      for item in array {
+        if let Some(map) = item.as_object() {
+          if map.contains_key("reference") {
+            list.push(Either::Right(ReusableObject::try_from(item)?));
+          } else {
+            list.push(Either::Left(SuccessObject::try_from(item)?));
+          }
+        }
+      }
+    }
+
+    Ok(list)
+  } else {
+    Ok(vec![])
+  }
+}
+
+fn json_load_failure_actions(map: &Map<String, Value>) -> anyhow::Result<Vec<Either<FailureObject, ReusableObject>>> {
+  if let Some(array) = map.get("failureActions") {
+    let mut list = vec![];
+
+    if let Some(array) = array.as_array() {
+      for item in array {
+        if let Some(map) = item.as_object() {
+          if map.contains_key("reference") {
+            list.push(Either::Right(ReusableObject::try_from(item)?));
+          } else {
+            list.push(Either::Left(FailureObject::try_from(item)?));
+          }
+        }
+      }
+    }
+
+    Ok(list)
+  } else {
+    Ok(vec![])
+  }
+}
+
+fn json_load_outputs(map: &Map<String, Value>) -> HashMap<String, String> {
+  map.get("outputs").map(|v | {
+    if let Some(outputs) = v.as_object() {
+      outputs.iter()
+        .map(|(k, v)| (k.clone(), v.as_str().unwrap_or_default().to_string()))
+        .collect()
+    } else {
+      hashmap!{}
+    }
+  }).unwrap_or_default()
+}
+
+impl TryFrom<&Value> for Step {
+  type Error = anyhow::Error;
+
+  fn try_from(value: &Value) -> Result<Self, Self::Error> {
+    if let Some(map) = value.as_object() {
+      Ok(Step {
+        step_id: json_object_require_string(&map, "stepId")?,
+        operation_id: json_object_lookup_string(&map, "operationId"),
+        operation_path: json_object_lookup_string(&map, "operationPath"),
+        workflow_id: json_object_lookup_string(&map, "workflowId"),
+        description: json_object_lookup_string(&map, "description"),
+        parameters: json_load_parameters(map)?,
+        request_body: map.get("requestBody")
+          .map(|v| RequestBody::try_from(v))
+          .transpose()?,
+        on_success: json_load_success_actions(map)?,
+        success_criteria: json_load_success_criteria(map)?,
+        on_failure: json_load_failure_actions(map)?,
+        outputs: json_load_outputs(map),
+        extensions: json_extract_extensions(map)?
+      })
+    } else {
+      Err(anyhow!("JSON value must be an Object, got {:?}", value))
+    }
+  }
+}
+
+fn json_load_success_criteria(map: &Map<String, Value>) -> anyhow::Result<Vec<Criterion>> {
+  if let Some(criteria) = map.get("successCriteria") {
+    let mut result = vec![];
+
+    if let Some(array) = criteria.as_array() {
+      for value in array {
+        result.push(Criterion::try_from(value)?);
+      }
+    }
+
+    Ok(result)
+  } else {
+    Ok(vec![])
+  }
+}
 
 impl TryFrom<&Value> for ParameterObject {
   type Error = anyhow::Error;
@@ -339,19 +343,23 @@ impl TryFrom<&Value> for FailureObject {
   }
 }
 
-// impl TryFrom<&Hash> for Components {
-//   type Error = anyhow::Error;
-//
-//   fn try_from(value: &Hash) -> Result<Self, Self::Error> {
-//     if let Some(hash) = yaml_hash_lookup(value, "components", |v | v.as_hash().cloned()) {
-//       Ok(Components {
-//         extensions: yaml_extract_extensions(&hash)?
-//       })
-//     } else {
-//       Ok(Components::default())
-//     }
-//   }
-// }
+impl TryFrom<&Value> for Components {
+  type Error = anyhow::Error;
+
+  fn try_from(value: &Value) -> Result<Self, Self::Error> {
+    if let Some(value) = value.get("components") {
+      if let Some(map) = value.as_object() {
+        Ok(Components {
+          extensions: json_extract_extensions(map)?
+        })
+      } else {
+        Ok(Components::default())
+      }
+    } else {
+      Ok(Components::default())
+    }
+  }
+}
 
 impl TryFrom<&Value> for ReusableObject {
   type Error = anyhow::Error;
@@ -754,37 +762,38 @@ mod tests {
   //     "two".to_string() => AnyValue::Integer(2)
   //   }));
   // }
-  //
-  // #[test]
-  // fn steps_supports_extensions() {
-  //   let mut hash = Hash::new();
-  //   hash.insert(Yaml::String("stepId".to_string()), Yaml::String("test".to_string()));
-  //   hash.insert(Yaml::String("x-one".to_string()), Yaml::String("1".to_string()));
-  //   hash.insert(Yaml::String("x-two".to_string()), Yaml::Integer(2));
-  //
-  //   let step = Step::try_from(&Yaml::Hash(hash)).unwrap();
-  //   expect!(step.extensions).to(be_equal_to(hashmap!{
-  //     "one".to_string() => AnyValue::String("1".to_string()),
-  //     "two".to_string() => AnyValue::Integer(2)
-  //   }));
-  // }
-  //
-  // #[test]
-  // fn components_supports_extensions() {
-  //   let mut hash = Hash::new();
-  //   hash.insert(Yaml::String("workflowId".to_string()), Yaml::String("test".to_string()));
-  //   hash.insert(Yaml::String("x-one".to_string()), Yaml::String("1".to_string()));
-  //   hash.insert(Yaml::String("x-two".to_string()), Yaml::Integer(2));
-  //
-  //   let mut outer = Hash::new();
-  //   outer.insert(Yaml::String("components".to_string()), Yaml::Hash(hash));
-  //
-  //   let components = Components::try_from(&outer).unwrap();
-  //   expect!(components.extensions).to(be_equal_to(hashmap!{
-  //     "one".to_string() => AnyValue::String("1".to_string()),
-  //     "two".to_string() => AnyValue::Integer(2)
-  //   }));
-  // }
+
+  #[test]
+  fn steps_supports_extensions() {
+    let json = json!({
+      "stepId": "test",
+      "x-one": "1",
+      "x-two": 2
+    });
+
+    let step = Step::try_from(&json).unwrap();
+    expect!(step.extensions).to(be_equal_to(hashmap!{
+      "one".to_string() => AnyValue::String("1".to_string()),
+      "two".to_string() => AnyValue::UInteger(2)
+    }));
+  }
+
+  #[test]
+  fn components_supports_extensions() {
+    let json = json!({
+      "components": {
+        "workflowId": "test",
+        "x-one": "1",
+        "x-two": 2
+      }
+    });
+
+    let components = Components::try_from(&json).unwrap();
+    expect!(components.extensions).to(be_equal_to(hashmap!{
+      "one".to_string() => AnyValue::String("1".to_string()),
+      "two".to_string() => AnyValue::UInteger(2)
+    }));
+  }
 
   #[test]
   fn load_success_object() {
@@ -969,27 +978,29 @@ mod tests {
     }));
   }
 
-  // #[test]
-  // fn load_step_parameters() {
-  //   let mut parameter = Hash::new();
-  //   parameter.insert(Yaml::String("name".to_string()), Yaml::String("username".to_string()));
-  //   parameter.insert(Yaml::String("in".to_string()), Yaml::String("query".to_string()));
-  //   parameter.insert(Yaml::String("value".to_string()), Yaml::String("$inputs.username".to_string()));
-  //
-  //   let mut hash = Hash::new();
-  //   hash.insert(Yaml::String("stepId".to_string()), Yaml::String("test".to_string()));
-  //   hash.insert(Yaml::String("parameters".to_string()), Yaml::Array(vec![Yaml::Hash(parameter)]));
-  //
-  //   let step = Step::try_from(&Yaml::Hash(hash)).unwrap();
-  //   expect!(step.parameters).to(be_equal_to(vec![
-  //     Either::Left(ParameterObject {
-  //       name: "username".to_string(),
-  //       r#in: Some("query".to_string()),
-  //       value: Either::Right("$inputs.username".to_string()),
-  //       extensions: Default::default()
-  //     })
-  //   ]));
-  // }
+  #[test]
+  fn load_step_parameters() {
+    let json = json!({
+      "stepId": "test",
+      "parameters": [
+        {
+          "name": "username",
+          "in": "query",
+          "value": "$inputs.username"
+        }
+      ]
+    });
+
+    let step = Step::try_from(&json).unwrap();
+    expect!(step.parameters).to(be_equal_to(vec![
+      Either::Left(ParameterObject {
+        name: "username".to_string(),
+        r#in: Some("query".to_string()),
+        value: Either::Right("$inputs.username".to_string()),
+        extensions: Default::default()
+      })
+    ]));
+  }
 
   #[test]
   fn load_request_body() {
