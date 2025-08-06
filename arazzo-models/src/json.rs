@@ -400,44 +400,39 @@ fn json_load_criterion_expression_type(json: &Map<String, Value>) -> anyhow::Res
   }).transpose()
 }
 
-// impl TryFrom<&Yaml> for RequestBody {
-//   type Error = anyhow::Error;
-//
-//   fn try_from(value: &Yaml) -> Result<Self, Self::Error> {
-//     if let Some(hash) = value.as_hash() {
-//       let content_type = yaml_hash_lookup_string(hash, "contentType");
-//       let payload = yaml_load_payload(hash, "payload", content_type.as_ref())?;
-//       Ok(RequestBody {
-//         content_type,
-//         payload,
-//         extensions: yaml_extract_extensions(&hash)?
-//       })
-//     } else {
-//       Err(anyhow!("YAML value must be a Hash, got {}", yaml_type_name(value)))
-//     }
-//   }
-// }
-//
-// fn yaml_load_payload(
-//   hash: &Hash,
-//   key: &str,
-//   _content_type: Option<&String>
-// ) -> anyhow::Result<Option<Rc<dyn Payload + Send + Sync>>> {
-//   yaml_hash_lookup(hash, key, |value| {
-//     match value {
-//       Yaml::String(s) => {
-//         let payload: Rc<dyn Payload + Send + Sync> = Rc::new(StringPayload(s.clone()));
-//         Some(Ok(payload))
-//       },
-//       Yaml::Null => Some(Ok(Rc::new(EmptyPayload))),
-//       _ => Some(yaml_to_json(value)
-//         .map(|json| {
-//           let payload: Rc<dyn Payload + Send + Sync> = Rc::new(JsonPayload(json));
-//           payload
-//         }))
-//     }
-//   }).transpose()
-// }
+impl TryFrom<&Value> for RequestBody {
+  type Error = anyhow::Error;
+
+  fn try_from(value: &Value) -> Result<Self, Self::Error> {
+    if let Some(map) = value.as_object() {
+      let content_type = json_object_lookup_string(map, "contentType");
+      let payload = json_load_payload(map, "payload", content_type.as_ref())?;
+      Ok(RequestBody {
+        content_type,
+        payload,
+        extensions: json_extract_extensions(&map)?
+      })
+    } else {
+      Err(anyhow!("JSON value must be an Object, got {:?}", value))
+    }
+  }
+}
+
+fn json_load_payload(
+  map: &Map<String, Value>,
+  key: &str,
+  _content_type: Option<&String>
+) -> anyhow::Result<Option<Rc<dyn Payload + Send + Sync>>> {
+  if let Some(value) = map.get(key) {
+    match value {
+      Value::Null => Ok(Some(Rc::new(EmptyPayload))),
+      Value::String(s) => Ok(Some(Rc::new(StringPayload(s.clone())))),
+      _ => Ok(Some(Rc::new(JsonPayload(value.clone()))))
+    }
+  } else {
+    Ok(None)
+  }
+}
 
 /// Returns the type name of the JSON value
 pub fn json_type_name(json: &Value) -> String {
@@ -957,121 +952,80 @@ mod tests {
   //     })
   //   ]));
   // }
-  //
-  // #[test]
-  // fn load_request_body() {
-  //   let mut hash = Hash::new();
-  //   hash.insert(Yaml::String("contentType".to_string()), Yaml::String("text/plain".to_string()));
-  //   hash.insert(Yaml::String("payload".to_string()), Yaml::String("some text".to_string()));
-  //
-  //   let body = RequestBody::try_from(&Yaml::Hash(hash)).unwrap();
-  //   expect!(body.content_type).to(be_some().value("text/plain"));
-  // }
-  //
-  // #[test]
-  // fn request_body_supports_extensions() {
-  //   let mut hash = Hash::new();
-  //   hash.insert(Yaml::String("contentType".to_string()), Yaml::String("text/plain".to_string()));
-  //   hash.insert(Yaml::String("x-one".to_string()), Yaml::String("1".to_string()));
-  //   hash.insert(Yaml::String("x-two".to_string()), Yaml::Integer(2));
-  //
-  //   let parameter = RequestBody::try_from(&Yaml::Hash(hash)).unwrap();
-  //   expect!(parameter.extensions).to(be_equal_to(hashmap!{
-  //     "one".to_string() => AnyValue::String("1".to_string()),
-  //     "two".to_string() => AnyValue::Integer(2)
-  //   }));
-  // }
-  //
-  // #[test]
-  // fn load_payload() {
-  //   let body = r#"
-  //                   contentType: application/json
-  //                   payload: |
-  //                     {
-  //                       "petOrder": {
-  //                         "petId": "{$inputs.pet_id}",
-  //                         "couponCode": "{$inputs.coupon_code}",
-  //                         "quantity": "{$inputs.quantity}",
-  //                         "status": "placed",
-  //                         "complete": false
-  //                       }
-  //                     }
-  //                   "#;
-  //   let yaml = YamlLoader::load_from_str(body).unwrap();
-  //
-  //   let body = RequestBody::try_from(&yaml[0]).unwrap();
-  //   expect!(body.content_type).to(be_some().value("application/json"));
-  //   let payload: &dyn Any = body.payload.as_ref().unwrap().as_ref();
-  //   let p = payload.downcast_ref::<StringPayload>().unwrap();
-  //   assert_eq!(
-  //     r#" |{
-  //         |  "petOrder": {
-  //         |    "petId": "{$inputs.pet_id}",
-  //         |    "couponCode": "{$inputs.coupon_code}",
-  //         |    "quantity": "{$inputs.quantity}",
-  //         |    "status": "placed",
-  //         |    "complete": false
-  //         |  }
-  //         |}
-  //         |"#.trim_margin().as_ref().unwrap(), &p.0);
-  //
-  //   let body = r#"
-  //                   contentType: application/json
-  //                   payload:
-  //                     petOrder:
-  //                       petId: $inputs.pet_id
-  //                       couponCode: $inputs.coupon_code
-  //                       quantity: $inputs.quantity
-  //                       status: placed
-  //                       complete: false
-  //                   "#;
-  //   let yaml = YamlLoader::load_from_str(body).unwrap();
-  //
-  //   let body = RequestBody::try_from(&yaml[0]).unwrap();
-  //   expect!(body.content_type).to(be_some().value("application/json"));
-  //   let payload: &dyn Any = body.payload.as_ref().unwrap().as_ref();
-  //   let p = payload.downcast_ref::<JsonPayload>().unwrap();
-  //   assert_eq!(
-  //     &json!({
-  //      "petOrder": {
-  //         "petId": "$inputs.pet_id",
-  //         "couponCode": "$inputs.coupon_code",
-  //         "quantity": "$inputs.quantity",
-  //         "status": "placed",
-  //         "complete": false
-  //       }
-  //     }),
-  //     &p.0
-  //   );
-  //
-  //   let body = r#"
-  //                   contentType: application/x-www-form-urlencoded
-  //                   payload:
-  //                     client_id: $inputs.clientId
-  //                     grant_type: $inputs.grantType
-  //                     redirect_uri: $inputs.redirectUri
-  //                     client_secret: $inputs.clientSecret
-  //                     code: $steps.browser-authorize.outputs.code
-  //                     scope: $inputs.scope
-  //                   "#;
-  //   let yaml = YamlLoader::load_from_str(body).unwrap();
-  //
-  //   let body = RequestBody::try_from(&yaml[0]).unwrap();
-  //   expect!(body.content_type).to(be_some().value("application/x-www-form-urlencoded"));
-  //   let payload: &dyn Any = body.payload.as_ref().unwrap().as_ref();
-  //   let p = payload.downcast_ref::<JsonPayload>().unwrap();
-  //   assert_eq!(
-  //     &json!({
-  //       "client_id": "$inputs.clientId",
-  //       "grant_type": "$inputs.grantType",
-  //       "redirect_uri": "$inputs.redirectUri",
-  //       "client_secret": "$inputs.clientSecret",
-  //       "code": "$steps.browser-authorize.outputs.code",
-  //       "scope": "$inputs.scope"
-  //     }),
-  //     &p.0
-  //   );
-  // }
+
+  #[test]
+  fn load_request_body() {
+    let json = json!({
+      "contentType": "text/plain",
+      "payload": "some text"
+    });
+
+    let body = RequestBody::try_from(&json).unwrap();
+    expect!(body.content_type).to(be_some().value("text/plain"));
+  }
+
+  #[test]
+  fn request_body_supports_extensions() {
+    let json = json!({
+      "contentType": "text/plain",
+      "payload": "some text",
+      "x-one": "1",
+      "x-two": 2
+    });
+
+    let parameter = RequestBody::try_from(&json).unwrap();
+    expect!(parameter.extensions).to(be_equal_to(hashmap!{
+      "one".to_string() => AnyValue::String("1".to_string()),
+      "two".to_string() => AnyValue::UInteger(2)
+    }));
+  }
+
+  #[test]
+  fn load_payload() {
+    let body = json!({
+      "contentType": "application/json",
+      "payload": "{\"petOrder\":{\"petId\": \"{$inputs.pet_id}\",\"couponCode\"\
+      :\"{$inputs.coupon_code}\",\"quantity\":\"{$inputs.quantity}\",\"status\":\
+      \"placed\",\"complete\":false}}"
+    });
+    let body = RequestBody::try_from(&body).unwrap();
+    expect!(body.content_type).to(be_some().value("application/json"));
+    let payload: &dyn Any = body.payload.as_ref().unwrap().as_ref();
+    let p = payload.downcast_ref::<StringPayload>().unwrap();
+    assert_eq!(
+      r#"{"petOrder":{"petId": "{$inputs.pet_id}","couponCode":"{$inputs.coupon_code}","quantity":"{$inputs.quantity}","status":"placed","complete":false}}"#,
+      &p.0
+    );
+
+    let body = json!({
+      "contentType": "application/json",
+      "payload": {
+        "petOrder": {
+          "petId": "$inputs.pet_id",
+          "couponCode": "$inputs.coupon_code",
+          "quantity": "$inputs.quantity",
+          "status": "placed",
+          "complete": "false"
+        }
+      }
+    });
+    let body = RequestBody::try_from(&body).unwrap();
+    expect!(body.content_type).to(be_some().value("application/json"));
+    let payload: &dyn Any = body.payload.as_ref().unwrap().as_ref();
+    let p = payload.downcast_ref::<JsonPayload>().unwrap();
+    assert_eq!(
+      &json!({
+       "petOrder": {
+          "petId": "$inputs.pet_id",
+          "couponCode": "$inputs.coupon_code",
+          "quantity": "$inputs.quantity",
+          "status": "placed",
+          "complete": "false"
+        }
+      }),
+      &p.0
+    );
+  }
 
   #[test]
   fn load_criterion() {
