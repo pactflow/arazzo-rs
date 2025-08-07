@@ -1,4 +1,4 @@
-//! Version 1.0.x specification models (https://spec.openapis.org/arazzo/v1.0.1.html)
+//! Version 1.0.x specification models (<https://spec.openapis.org/arazzo/v1.0.1.html>)
 
 use std::collections::HashMap;
 use std::rc::Rc;

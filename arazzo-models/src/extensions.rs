@@ -1,4 +1,4 @@
-//! Structs and Traits for dealing with extensions (https://spec.openapis.org/arazzo/v1.0.1.html#specification-extensions).
+//! Structs and Traits for dealing with extensions (<https://spec.openapis.org/arazzo/v1.0.1.html#specification-extensions>).
 
 use std::collections::HashMap;
 
