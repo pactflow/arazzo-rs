@@ -1,5 +1,11 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.0.4 - Complete 1.0 spec implementation
+
+* de26784 - feat: Added all fields for Components (Ronald Holshausen, Thu Aug 7 12:16:49 2025 +1000)
+* d9dd8eb - feat: Added criteria to SuccessObject and FailureObject (Ronald Holshausen, Thu Aug 7 11:43:56 2025 +1000)
+* 050a60b - bump version to 0.0.4 (Ronald Holshausen, Thu Aug 7 10:48:08 2025 +1000)
+
 # 0.0.3 - Support loading from JSON
 
 * fe393a0 - feat: Completed loading models from JSON (Ronald Holshausen, Thu Aug 7 10:43:36 2025 +1000)
