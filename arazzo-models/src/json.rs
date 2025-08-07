@@ -1,43 +1,66 @@
 //! Functions and Traits for loading Arazzo objects from a JSON document
 
-use anyhow::anyhow;
-use itertools::Either;
-use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::rc::Rc;
-use maplit::hashmap;
-use crate::extensions::{json_extract_extensions, yaml_extract_extensions, AnyValue};
-use crate::payloads::{EmptyPayload, JsonPayload, Payload, StringPayload};
-use crate::v1_0::{ArazzoDescription, Components, Criterion, CriterionExpressionType, FailureObject, Info, ParameterObject, RequestBody, ReusableObject, SourceDescription, Step, SuccessObject, Workflow};
 
-// impl TryFrom<&Value> for ArazzoDescription {
-//   type Error = anyhow::Error;
-//
-//   fn try_from(value: &Value) -> Result<Self, Self::Error> {
-//     if let Some(hash) = value.as_object() {
-//       if let Ok(version) = json_object_require_string(hash, "arazzo") {
-//         let info = Info::try_from(hash)?;
-//          Err(anyhow!("Info Object is required [4.6.1.1 Fixed Fields]"))
-//         let source_descriptions = json_load_source_descriptions(hash)?;
-//         let workflows = json_load_workflows(hash)?;
-//         let components = Components::try_from(hash)?;
-//
-//         Ok(ArazzoDescription {
-//           arazzo: version,
-//           info,
-//           source_descriptions,
-//           workflows,
-//           components,
-//           extensions: yaml_extract_extensions(&hash)?
-//         })
-//       } else {
-//         Err(anyhow!("Arazzo version number is required [4.6.1.1 Fixed Fields]"))
-//       }
-//     } else {
-//       Err(anyhow!("JSON value must be a Hash, got {}", json_type_name(value)))
-//     }
-//   }
-// }
+use anyhow::anyhow;
+use itertools::Either;
+use maplit::hashmap;
+use serde_json::{Map, Value};
+
+use crate::extensions::{json_extract_extensions, AnyValue};
+use crate::payloads::{EmptyPayload, JsonPayload, Payload, StringPayload};
+use crate::v1_0::{
+  ArazzoDescription,
+  Components,
+  Criterion,
+  CriterionExpressionType,
+  FailureObject,
+  Info,
+  ParameterObject,
+  RequestBody,
+  ReusableObject,
+  SourceDescription,
+  Step,
+  SuccessObject,
+  Workflow
+};
+
+impl TryFrom<&Value> for ArazzoDescription {
+  type Error = anyhow::Error;
+
+  fn try_from(value: &Value) -> Result<Self, Self::Error> {
+    if let Some(map) = value.as_object() {
+      if let Ok(version) = json_object_require_string(map, "arazzo") {
+        let info = if let Some(json) = map.get("info") {
+          Info::try_from(json)
+        } else {
+          Err(anyhow!("Info Object is required [4.6.1.1 Fixed Fields]"))
+        }?;
+        let source_descriptions = json_load_source_descriptions(map)?;
+        let workflows = json_load_workflows(map)?;
+        let components = if let Some(value) = map.get("components") {
+          Components::try_from(value)?
+        } else {
+          Components::default()
+        };
+
+        Ok(ArazzoDescription {
+          arazzo: version,
+          info,
+          source_descriptions,
+          workflows,
+          components,
+          extensions: json_extract_extensions(&map)?
+        })
+      } else {
+        Err(anyhow!("Arazzo version number is required [4.6.1.1 Fixed Fields]"))
+      }
+    } else {
+      Err(anyhow!("JSON value must be an Object, got {:?}", value))
+    }
+  }
+}
 
 impl TryFrom<&Value> for SourceDescription {
   type Error = anyhow::Error;
@@ -56,23 +79,24 @@ impl TryFrom<&Value> for SourceDescription {
   }
 }
 
-// fn yaml_load_source_descriptions(hash: &Hash) -> anyhow::Result<Vec<SourceDescription>> {
-//   if let Some(array) = yaml_hash_lookup(hash, "sourceDescriptions", |v | v.as_vec().cloned()) {
-//     if array.is_empty() {
-//       Err(anyhow!("Source Description list must have at least one entry [4.6.1.1 Fixed Fields]"))
-//     } else {
-//       let mut list = vec![];
-//
-//       for item in &array {
-//         list.push(SourceDescription::try_from(item)?);
-//       }
-//
-//       Ok(list)
-//     }
-//   } else {
-//     Err(anyhow!("Source Description Object is required [4.6.1.1 Fixed Fields]"))
-//   }
-// }
+fn json_load_source_descriptions(map: &Map<String, Value>) -> anyhow::Result<Vec<SourceDescription>> {
+  if let Some(descriptions) = map.get("sourceDescriptions") &&
+    let Some(array) = descriptions.as_array() {
+    if array.is_empty() {
+      Err(anyhow!("Source Description list must have at least one entry [4.6.1.1 Fixed Fields]"))
+    } else {
+      let mut list = vec![];
+
+      for item in array {
+        list.push(SourceDescription::try_from(item)?);
+      }
+
+      Ok(list)
+    }
+  } else {
+    Err(anyhow!("Source Description Object is required [4.6.1.1 Fixed Fields]"))
+  }
+}
 
 impl TryFrom<&Value> for Info {
   type Error = anyhow::Error;
@@ -92,23 +116,24 @@ impl TryFrom<&Value> for Info {
   }
 }
 
-// fn yaml_load_workflows(hash: &Hash) -> anyhow::Result<Vec<Workflow>> {
-//   if let Some(array) = yaml_hash_lookup(hash, "workflows", |v | v.as_vec().cloned()) {
-//     if array.is_empty() {
-//       Err(anyhow!("Workflows list must have at least one entry [4.6.1.1 Fixed Fields]"))
-//     } else {
-//       let mut list = vec![];
-//
-//       for item in &array {
-//         list.push(Workflow::try_from(item)?);
-//       }
-//
-//       Ok(list)
-//     }
-//   } else {
-//     Err(anyhow!("Workflow Object is required [4.6.1.1 Fixed Fields]"))
-//   }
-// }
+fn json_load_workflows(map: &Map<String, Value>) -> anyhow::Result<Vec<Workflow>> {
+  if let Some(array) = map.get("workflows") &&
+     let Some(workflows) = array.as_array() {
+    if workflows.is_empty() {
+      Err(anyhow!("Workflows list must have at least one entry [4.6.1.1 Fixed Fields]"))
+    } else {
+      let mut list = vec![];
+
+      for item in workflows {
+        list.push(Workflow::try_from(item)?);
+      }
+
+      Ok(list)
+    }
+  } else {
+    Err(anyhow!("Workflow Object is required [4.6.1.1 Fixed Fields]"))
+  }
+}
 
 impl TryFrom<&Value> for Workflow {
   type Error = anyhow::Error;
@@ -348,14 +373,10 @@ impl TryFrom<&Value> for Components {
   type Error = anyhow::Error;
 
   fn try_from(value: &Value) -> Result<Self, Self::Error> {
-    if let Some(value) = value.get("components") {
-      if let Some(map) = value.as_object() {
-        Ok(Components {
-          extensions: json_extract_extensions(map)?
-        })
-      } else {
-        Ok(Components::default())
-      }
+    if let Some(map) = value.as_object() {
+      Ok(Components {
+        extensions: json_extract_extensions(map)?
+      })
     } else {
       Ok(Components::default())
     }
@@ -561,116 +582,132 @@ pub fn json_object_lookup_string_list(map: &Map<String, Value>, key: &str) -> Op
 
 #[cfg(test)]
 mod tests {
+  use std::any::Any;
+
   use expectest::prelude::*;
+  use itertools::Either;
   use maplit::hashmap;
   use pretty_assertions::assert_eq;
   use serde_json::{json, Value};
-  use std::any::Any;
-  use itertools::Either;
-  use trim_margin::MarginTrimmable;
 
   use crate::extensions::AnyValue;
   use crate::payloads::{JsonPayload, StringPayload};
   use crate::v1_0::*;
 
-  // #[test]
-  // fn fails_to_load_if_the_main_value_is_not_a_json_object() {
-  //   expect!(ArazzoDescription::try_from(&Value::String("test".to_string()))).to(be_err());
-  // }
+  #[test]
+  fn fails_to_load_if_the_main_value_is_not_a_json_object() {
+    expect!(ArazzoDescription::try_from(&Value::String("test".to_string()))).to(be_err());
+  }
 
-  // #[test]
-  // fn fails_to_load_if_the_version_is_missing() {
-  //   expect!(ArazzoDescription::try_from(&Yaml::Hash(Hash::new()))).to(be_err());
-  // }
-  //
-  // #[test]
-  // fn fails_to_load_if_the_version_is_not_a_string() {
-  //   let mut hash = Hash::new();
-  //   hash.insert(Yaml::String("arazzo".to_string()), Yaml::Hash(Hash::new()));
-  //   expect!(ArazzoDescription::try_from(&Yaml::Hash(hash))).to(be_err());
-  // }
-  //
-  // #[test]
-  // fn fails_to_load_if_the_info_is_missing() {
-  //   let mut hash = Hash::new();
-  //   hash.insert(Yaml::String("arazzo".to_string()), Yaml::String("1.0.0".to_string()));
-  //   expect!(ArazzoDescription::try_from(&Yaml::Hash(hash))).to(be_err());
-  // }
-  //
-  // #[test]
-  // fn fails_to_load_if_the_source_descriptions_are_missing() {
-  //   let mut hash = Hash::new();
-  //   hash.insert(Yaml::String("arazzo".to_string()), Yaml::String("1.0.0".to_string()));
-  //   hash.insert(Yaml::String("info".to_string()), Yaml::Hash(info_fixture()));
-  //   expect!(ArazzoDescription::try_from(&Yaml::Hash(hash))).to(be_err());
-  // }
-  //
-  // #[test]
-  // fn fails_to_load_if_the_source_descriptions_are_empty() {
-  //   let mut hash = Hash::new();
-  //   hash.insert(Yaml::String("arazzo".to_string()), Yaml::String("1.0.0".to_string()));
-  //   hash.insert(Yaml::String("info".to_string()), Yaml::Hash(info_fixture()));
-  //   hash.insert(Yaml::String("sourceDescriptions".to_string()), Yaml::Array(vec![]));
-  //   expect!(ArazzoDescription::try_from(&Yaml::Hash(hash))).to(be_err());
-  // }
-  //
-  // #[test]
-  // fn fails_to_load_if_the_workflows_are_missing() {
-  //   let mut hash = Hash::new();
-  //   hash.insert(Yaml::String("arazzo".to_string()), Yaml::String("1.0.0".to_string()));
-  //   hash.insert(Yaml::String("info".to_string()), Yaml::Hash(info_fixture()));
-  //   hash.insert(Yaml::String("sourceDescriptions".to_string()), Yaml::Array(source_descriptions_fixture()));
-  //   expect!(ArazzoDescription::try_from(&Yaml::Hash(hash))).to(be_err());
-  // }
-  //
-  // #[test]
-  // fn fails_to_load_if_the_workflows_are_empty() {
-  //   let mut hash = Hash::new();
-  //   hash.insert(Yaml::String("arazzo".to_string()), Yaml::String("1.0.0".to_string()));
-  //   hash.insert(Yaml::String("info".to_string()), Yaml::Hash(info_fixture()));
-  //   hash.insert(Yaml::String("sourceDescriptions".to_string()), Yaml::Array(source_descriptions_fixture()));
-  //   hash.insert(Yaml::String("workflows".to_string()), Yaml::Array(vec![]));
-  //   expect!(ArazzoDescription::try_from(&Yaml::Hash(hash))).to(be_err());
-  // }
-  //
-  // #[test]
-  // fn arazzo_description_supports_extensions() {
-  //   let mut hash = Hash::new();
-  //   hash.insert(Yaml::String("arazzo".to_string()), Yaml::String("1.0.0".to_string()));
-  //   hash.insert(Yaml::String("x-one".to_string()), Yaml::String("1".to_string()));
-  //   hash.insert(Yaml::String("x-two".to_string()), Yaml::Integer(2));
-  //
-  //   hash.insert(Yaml::String("info".to_string()), Yaml::Hash(info_fixture()));
-  //   hash.insert(Yaml::String("sourceDescriptions".to_string()), Yaml::Array(source_descriptions_fixture()));
-  //   hash.insert(Yaml::String("workflows".to_string()), Yaml::Array(workflows_fixture()));
-  //
-  //   let desc = ArazzoDescription::try_from(&Yaml::Hash(hash)).unwrap();
-  //   expect!(desc.extensions).to(be_equal_to(hashmap!{
-  //     "one".to_string() => AnyValue::String("1".to_string()),
-  //     "two".to_string() => AnyValue::Integer(2)
-  //   }));
-  // }
-  //
-  // fn info_fixture() -> Hash {
-  //   let mut info = Hash::new();
-  //   info.insert(Yaml::String("title".to_string()), Yaml::String("test".to_string()));
-  //   info.insert(Yaml::String("version".to_string()), Yaml::String("1.0.0".to_string()));
-  //   info
-  // }
-  //
-  // fn source_descriptions_fixture() -> Vec<Yaml> {
-  //   let mut desc = Hash::new();
-  //   desc.insert(Yaml::String("name".to_string()), Yaml::String("test".to_string()));
-  //   desc.insert(Yaml::String("url".to_string()), Yaml::String("http://test".to_string()));
-  //   vec![Yaml::Hash(desc)]
-  // }
-  //
-  // fn workflows_fixture() -> Vec<Yaml> {
-  //   let mut wf = Hash::new();
-  //   wf.insert(Yaml::String("workflowId".to_string()), Yaml::String("test".to_string()));
-  //   wf.insert(Yaml::String("steps".to_string()), Yaml::Array(steps_fixture()));
-  //   vec![Yaml::Hash(wf)]
-  // }
+  #[test]
+  fn fails_to_load_if_the_version_is_missing() {
+    expect!(ArazzoDescription::try_from(&json!({}))).to(be_err());
+  }
+
+  #[test]
+  fn fails_to_load_if_the_version_is_not_a_string() {
+    expect!(ArazzoDescription::try_from(&json!({ "arazzo": {} }))).to(be_err());
+  }
+
+  #[test]
+  fn fails_to_load_if_the_info_is_missing() {
+    expect!(ArazzoDescription::try_from(&json!({ "arazzo": "1.0.0" }))).to(be_err());
+  }
+
+  #[test]
+  fn fails_to_load_if_the_source_descriptions_are_missing() {
+    let json = json!({
+      "arazzo": "1.0.0",
+      "info": {
+        "title": "test",
+        "version": "1.2.3"
+      }
+    });
+    expect!(ArazzoDescription::try_from(&json)).to(be_err());
+  }
+
+  #[test]
+  fn fails_to_load_if_the_source_descriptions_are_empty() {
+    let json = json!({
+      "arazzo": "1.0.0",
+      "info": {
+        "title": "test",
+        "version": "1.2.3"
+      },
+      "sourceDescriptions": []
+    });
+    expect!(ArazzoDescription::try_from(&json)).to(be_err());
+  }
+
+  #[test]
+  fn fails_to_load_if_the_workflows_are_missing() {
+    let json = json!({
+      "arazzo": "1.0.0",
+      "info": {
+        "title": "test",
+        "version": "1.2.3"
+      },
+      "sourceDescriptions": [
+        {
+          "name": "test",
+          "url": "http://test"
+        }
+      ]
+    });
+    expect!(ArazzoDescription::try_from(&json)).to(be_err());
+  }
+
+  #[test]
+  fn fails_to_load_if_the_workflows_are_empty() {
+    let json = json!({
+      "arazzo": "1.0.0",
+      "info": {
+        "title": "test",
+        "version": "1.2.3"
+      },
+      "sourceDescriptions": [
+        {
+          "name": "test",
+          "url": "http://test"
+        }
+      ],
+      "workflows": []
+    });
+    expect!(ArazzoDescription::try_from(&json)).to(be_err());
+  }
+
+  #[test]
+  fn arazzo_description_supports_extensions() {
+    let json = json!({
+      "arazzo": "1.0.0",
+      "x-one": "1",
+      "x-two": 2,
+      "info": {
+        "title": "test",
+        "version": "1.2.3"
+      },
+      "sourceDescriptions": [
+        {
+          "name": "test",
+          "url": "http://test"
+        }
+      ],
+      "workflows": [
+        {
+          "workflowId": "test",
+          "steps": [
+            { "stepId": "test" }
+          ]
+        }
+      ]
+    });
+
+    let desc = ArazzoDescription::try_from(&json).unwrap();
+    expect!(desc.extensions).to(be_equal_to(hashmap!{
+      "one".to_string() => AnyValue::String("1".to_string()),
+      "two".to_string() => AnyValue::UInteger(2)
+    }));
+  }
 
   #[test]
   fn info_supports_extensions() {
@@ -755,11 +792,9 @@ mod tests {
   #[test]
   fn components_supports_extensions() {
     let json = json!({
-      "components": {
-        "workflowId": "test",
-        "x-one": "1",
-        "x-two": 2
-      }
+      "workflowId": "test",
+      "x-one": "1",
+      "x-two": 2
     });
 
     let components = Components::try_from(&json).unwrap();

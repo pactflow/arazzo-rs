@@ -277,11 +277,11 @@ fn loads_the_main_spec_descriptors_from_yaml() {
 
 #[test]
 fn loads_the_main_spec_descriptors_from_json() {
-  // let yaml = YamlLoader::load_from_str(BASIC_SPEC_EXAMPLE_YAML).unwrap();
-  // let yaml_descriptor = ArazzoDescription::try_from(&yaml[0]).unwrap();
-  //
-  // let json: Value = serde_json::from_str(BASIC_SPEC_EXAMPLE_JSON).unwrap();
-  // let json_descriptor = ArazzoDescription::try_from(&json).unwrap();
-  //
-  // expect!(json_descriptor).to(be_equal_to(yaml_descriptor));
+  let yaml = YamlLoader::load_from_str(BASIC_SPEC_EXAMPLE_YAML).unwrap();
+  let yaml_descriptor = ArazzoDescription::try_from(&yaml[0]).unwrap();
+
+  let json: Value = serde_json::from_str(BASIC_SPEC_EXAMPLE_JSON).unwrap();
+  let json_descriptor = ArazzoDescription::try_from(&json).unwrap();
+
+  expect!(json_descriptor).to(be_equal_to(yaml_descriptor));
 }
