@@ -180,6 +180,14 @@ pub struct FailureObject {
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#components-object)
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Components {
+  /// Object to hold reusable JSON Schema objects to be referenced from workflow inputs.
+  pub inputs: HashMap<String, Value>,
+  /// Object to hold reusable Parameter Objects
+  pub parameters: HashMap<String, ParameterObject>,
+  /// Object to hold reusable Success Actions Objects.
+  pub success_actions: HashMap<String, SuccessObject>,
+  /// Object to hold reusable Failure Actions Objects.
+  pub failure_actions: HashMap<String, FailureObject>,
   /// Extension values
   pub extensions: HashMap<String, AnyValue>
 }

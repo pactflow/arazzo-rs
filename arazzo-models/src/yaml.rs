@@ -5,6 +5,7 @@ use itertools::Either;
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::rc::Rc;
+use maplit::hashmap;
 use yaml_rust2::yaml::Hash;
 use yaml_rust2::Yaml;
 
@@ -337,7 +338,61 @@ impl TryFrom<&Hash> for Components {
 
   fn try_from(value: &Hash) -> Result<Self, Self::Error> {
     if let Some(hash) = yaml_hash_lookup(value, "components", |v | v.as_hash().cloned()) {
+      let mut inputs = hashmap!{};
+      if let Some(inputs_hash) = yaml_hash_lookup(&hash, "inputs", |v | v.as_hash().cloned()) {
+        for (key, value) in &inputs_hash {
+          if let Some(key) = key.as_str() {
+            inputs.insert(key.to_string(), yaml_to_json(value)?);
+          } else {
+            return Err(anyhow!("Component input keys must be a String, got '{}'", yaml_type_name(key)));
+          }
+        }
+      }
+
+      let mut parameters = hashmap!{};
+      if let Some(parameters_hash) = yaml_hash_lookup(&hash, "parameters", |v | v.as_hash().cloned()) {
+        for (key, value) in &parameters_hash {
+          if let Some(key) = key.as_str() {
+            if let Some(parameter_hash) = value.as_hash() {
+              parameters.insert(key.to_string(), ParameterObject::try_from(parameter_hash)?);
+            }
+          } else {
+            return Err(anyhow!("Component parameter keys must be a String, got '{}'", yaml_type_name(key)));
+          }
+        }
+      }
+
+      let mut success_actions = hashmap!{};
+      if let Some(success_hash) = yaml_hash_lookup(&hash, "successActions", |v | v.as_hash().cloned()) {
+        for (key, value) in &success_hash {
+          if let Some(key) = key.as_str() {
+            if let Some(hash) = value.as_hash() {
+              success_actions.insert(key.to_string(), SuccessObject::try_from(hash)?);
+            }
+          } else {
+            return Err(anyhow!("Component Success Action keys must be a String, got '{}'", yaml_type_name(key)));
+          }
+        }
+      }
+
+      let mut failure_actions = hashmap!{};
+      if let Some(failure_hash) = yaml_hash_lookup(&hash, "failureActions", |v | v.as_hash().cloned()) {
+        for (key, value) in &failure_hash {
+          if let Some(key) = key.as_str() {
+            if let Some(hash) = value.as_hash() {
+              failure_actions.insert(key.to_string(), FailureObject::try_from(hash)?);
+            }
+          } else {
+            return Err(anyhow!("Component Failure Action keys must be a String, got '{}'", yaml_type_name(key)));
+          }
+        }
+      }
+
       Ok(Components {
+        inputs,
+        parameters,
+        success_actions,
+        failure_actions,
         extensions: yaml_extract_extensions(&hash)?
       })
     } else {
@@ -820,6 +875,87 @@ mod tests {
       "one".to_string() => AnyValue::String("1".to_string()),
       "two".to_string() => AnyValue::Integer(2)
     }));
+  }
+
+  #[test]
+  fn load_components() {
+    let yaml_str = r#"
+    components:
+      parameters:
+        storeId:
+          name: storeId
+          in: header
+          value: $inputs.x-store-id
+      inputs:
+        pagination:
+          type: object
+          properties:
+            page:
+              type: integer
+              format: int32
+            pageSize:
+              type: integer
+              format: int32
+      failureActions:
+        refreshToken:
+          name: refreshExpiredToken
+          type: retry
+          retryAfter: 1
+          retryLimit: 5
+          workflowId: refreshTokenWorkflowId
+          criteria:
+              # assertions to determine if this action should be executed
+              - condition: $statusCode == 401
+    "#;
+    let yaml = YamlLoader::load_from_str(yaml_str).unwrap();
+
+    let components = Components::try_from(yaml[0].as_hash().unwrap()).unwrap();
+    assert_eq!(components, Components {
+      inputs: hashmap!{
+        "pagination".to_string() => json!({
+          "type": "object",
+          "properties": {
+            "page": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "pageSize": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        })
+      },
+      parameters: hashmap!{
+        "storeId".to_string() => ParameterObject {
+          name: "storeId".to_string(),
+          r#in: Some("header".to_string()),
+          value: Either::Right("$inputs.x-store-id".to_string()),
+          extensions: Default::default()
+        }
+      },
+      success_actions: hashmap!{},
+      failure_actions: hashmap!{
+        "refreshToken".to_string() => FailureObject {
+          name: "refreshExpiredToken".to_string(),
+          r#type: "retry".to_string(),
+          workflow_id: Some("refreshTokenWorkflowId".to_string()),
+          step_id: None,
+          retry_after: Some(1f64),
+          retry_limit: Some(5),
+          criteria: vec![
+            Criterion {
+              context: None,
+              condition: "$statusCode == 401".to_string(),
+              r#type: None,
+              extensions: Default::default()
+            }
+          ],
+          extensions: Default::default()
+        }
+      },
+      extensions: hashmap!{}
+    });
   }
 
   #[test]

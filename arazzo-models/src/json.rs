@@ -376,7 +376,43 @@ impl TryFrom<&Value> for Components {
 
   fn try_from(value: &Value) -> Result<Self, Self::Error> {
     if let Some(map) = value.as_object() {
+      let mut inputs = hashmap!{};
+      if let Some(object) = map.get("inputs") &&
+         let Some(map) = object.as_object() {
+        for (key, value) in map {
+          inputs.insert(key.clone(), value.clone());
+        }
+      }
+
+      let mut parameters = hashmap!{};
+      if let Some(object) = map.get("parameters") &&
+         let Some(map) = object.as_object() {
+        for (key, value) in map {
+          parameters.insert(key.to_string(), ParameterObject::try_from(value)?);
+        }
+      }
+
+      let mut success_actions = hashmap!{};
+      if let Some(object) = map.get("successActions") &&
+         let Some(map) = object.as_object() {
+        for (key, value) in map {
+          success_actions.insert(key.to_string(), SuccessObject::try_from(value)?);
+        }
+      }
+
+      let mut failure_actions = hashmap!{};
+      if let Some(object) = map.get("failureActions") &&
+         let Some(map) = object.as_object() {
+        for (key, value) in map {
+          failure_actions.insert(key.to_string(), FailureObject::try_from(value)?);
+        }
+      }
+
       Ok(Components {
+        inputs,
+        parameters,
+        success_actions,
+        failure_actions,
         extensions: json_extract_extensions(map)?
       })
     } else {
@@ -802,6 +838,97 @@ mod tests {
       "one".to_string() => AnyValue::String("1".to_string()),
       "two".to_string() => AnyValue::UInteger(2)
     }));
+  }
+
+  #[test]
+  fn load_components() {
+    let json_str = r#"{
+      "parameters": {
+        "storeId": {
+          "name": "storeId",
+          "in": "header",
+          "value": "$inputs.x-store-id"
+        }
+      },
+      "inputs": {
+        "pagination": {
+          "type": "object",
+          "properties": {
+            "page": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "pageSize": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        }
+      },
+      "failureActions": {
+        "refreshToken": {
+          "name": "refreshExpiredToken",
+          "type": "retry",
+          "retryAfter": 1,
+          "retryLimit": 5,
+          "workflowId": "refreshTokenWorkflowId",
+          "criteria": [
+            {
+              "condition": "{$statusCode == 401}"
+            }
+          ]
+        }
+      }
+    }"#;
+    let json: Value = serde_json::from_str(json_str).unwrap();
+
+    let components = Components::try_from(&json).unwrap();
+    assert_eq!(components, Components {
+      inputs: hashmap!{
+        "pagination".to_string() => json!({
+          "type": "object",
+          "properties": {
+            "page": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "pageSize": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        })
+      },
+      parameters: hashmap!{
+        "storeId".to_string() => ParameterObject {
+          name: "storeId".to_string(),
+          r#in: Some("header".to_string()),
+          value: Either::Right("$inputs.x-store-id".to_string()),
+          extensions: Default::default()
+        }
+      },
+      success_actions: hashmap!{},
+      failure_actions: hashmap!{
+        "refreshToken".to_string() => FailureObject {
+          name: "refreshExpiredToken".to_string(),
+          r#type: "retry".to_string(),
+          workflow_id: Some("refreshTokenWorkflowId".to_string()),
+          step_id: None,
+          retry_after: Some(1f64),
+          retry_limit: Some(5),
+          criteria: vec![
+            Criterion {
+              context: None,
+              condition: "{$statusCode == 401}".to_string(),
+              r#type: None,
+              extensions: Default::default()
+            }
+          ],
+          extensions: Default::default()
+        }
+      },
+      extensions: hashmap!{}
+    });
   }
 
   #[test]
