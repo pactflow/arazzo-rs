@@ -341,6 +341,7 @@ impl TryFrom<&Value> for SuccessObject {
         r#type: json_object_require_string(map, "type")?,
         workflow_id: json_object_lookup_string(map, "workflowId"),
         step_id: json_object_lookup_string(map, "stepId"),
+        criteria: json_load_criteria(map, "criteria")?,
         extensions: json_extract_extensions(map)?
       })
     } else {
@@ -361,6 +362,7 @@ impl TryFrom<&Value> for FailureObject {
         step_id: json_object_lookup_string(map, "stepId"),
         retry_after: json_object_lookup_number(map, "retryAfter"),
         retry_limit: json_object_lookup_integer(map, "retryLimit"),
+        criteria: json_load_criteria(map, "criteria")?,
         extensions: json_extract_extensions(map)?
       })
     } else {
@@ -418,6 +420,19 @@ impl TryFrom<&Value> for Criterion {
     }
   }
 }
+
+fn json_load_criteria(map: &Map<String, Value>, key: &str) -> anyhow::Result<Vec<Criterion>> {
+  let mut criterion = vec![];
+
+  if let Some(criteria) = map.get(key) && let Some(array) = criteria.as_array() {
+    for item in array {
+      criterion.push(Criterion::try_from(item)?);
+    }
+  }
+
+  Ok(criterion)
+}
+
 
 impl TryFrom<&Value> for CriterionExpressionType {
   type Error = anyhow::Error;

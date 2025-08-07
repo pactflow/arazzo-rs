@@ -145,6 +145,8 @@ pub struct SuccessObject {
   pub workflow_id: Option<String>,
   /// The stepId to transfer to upon success of the step.
   pub step_id: Option<String>,
+  /// List of assertions to determine if this action shall be executed.
+  pub criteria: Vec<Criterion>,
   /// Extension values
   pub extensions: HashMap<String, AnyValue>
 }
@@ -168,6 +170,8 @@ pub struct FailureObject {
   /// A non-negative integer indicating how many attempts to retry the step may be attempted before
   /// failing the overall step.
   pub retry_limit: Option<i64>,
+  /// List of assertions to determine if this action shall be executed.
+  pub criteria: Vec<Criterion>,
   /// Extension values
   pub extensions: HashMap<String, AnyValue>
 }

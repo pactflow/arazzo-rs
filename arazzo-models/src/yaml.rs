@@ -309,6 +309,7 @@ impl TryFrom<&Hash> for SuccessObject {
       r#type: yaml_hash_require_string(value, "type")?,
       workflow_id: yaml_hash_lookup_string(value, "workflowId"),
       step_id: yaml_hash_lookup_string(value, "stepId"),
+      criteria: yaml_load_criteria(value, "criteria")?,
       extensions: yaml_extract_extensions(value)?
     })
   }
@@ -325,6 +326,7 @@ impl TryFrom<&Hash> for FailureObject {
       step_id: yaml_hash_lookup_string(value, "stepId"),
       retry_after: yaml_hash_lookup_number(value, "retryAfter"),
       retry_limit: yaml_hash_lookup_integer(value, "retryLimit"),
+      criteria: yaml_load_criteria(value, "criteria")?,
       extensions: yaml_extract_extensions(value)?
     })
   }
@@ -374,6 +376,18 @@ impl TryFrom<&Yaml> for Criterion {
       Err(anyhow!("YAML value must be a Hash, got {}", yaml_type_name(value)))
     }
   }
+}
+
+fn yaml_load_criteria(hash: &Hash, key: &str) -> anyhow::Result<Vec<Criterion>> {
+  let array = yaml_hash_lookup(hash, key, |value | value.as_vec().cloned())
+    .unwrap_or_default();
+  let mut criterion = vec![];
+
+  for item in &array {
+    criterion.push(Criterion::try_from(item)?);
+  }
+
+  Ok(criterion)
 }
 
 impl TryFrom<&Yaml> for CriterionExpressionType {
