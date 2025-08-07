@@ -1,5 +1,18 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.0.3 - Support loading from JSON
+
+* fe393a0 - feat: Completed loading models from JSON (Ronald Holshausen, Thu Aug 7 10:43:36 2025 +1000)
+* d130300 - feat: Add loading Info and SourceDescription from JSON (Ronald Holshausen, Thu Aug 7 09:56:25 2025 +1000)
+* 9bd9f1e - feat: Add loading Workflow from JSON (Ronald Holshausen, Thu Aug 7 09:47:50 2025 +1000)
+* 982fc15 - feat: Added loading Step from JSON (Ronald Holshausen, Wed Aug 6 17:38:14 2025 +1000)
+* 4e3310b - feat: Added loading SuccessObject and FailureObject from JSON (Ronald Holshausen, Wed Aug 6 17:13:08 2025 +1000)
+* 8f68338 - feat: Added loading ReusableObject and ParameterObject from JSON (Ronald Holshausen, Wed Aug 6 16:59:58 2025 +1000)
+* 6daf205 - feat: Added loading Request Body and Payload from JSON (Ronald Holshausen, Wed Aug 6 16:44:41 2025 +1000)
+* 2db3c4d - feat: Added loading Criterion from JSON (Ronald Holshausen, Wed Aug 6 16:25:58 2025 +1000)
+* 755baef - refactor: Move all YAML functions to the yaml module (Ronald Holshausen, Wed Aug 6 15:48:13 2025 +1000)
+* e549b99 - bump version to 0.0.3 (Ronald Holshausen, Wed Aug 6 15:26:28 2025 +1000)
+
 # 0.0.2 - All spec objects completed
 
 * a50365b - feat: Added Criterion (Ronald Holshausen, Wed Aug 6 15:20:43 2025 +1000)
