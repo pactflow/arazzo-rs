@@ -7,16 +7,16 @@ You can create a Specification document with the following snippet. This require
 feature flag enabled and uses the `yaml-rust2` crate.
 
 ```rust,no_run
-# use std::fs;
-# use arazzo_models::v1_0::ArazzoDescription;
-# use yaml_rust2::YamlLoader;
-# fn main() -> anyhow::Result<()> {
-# let path = "/tmp/path.txt";
+use std::fs;
+use arazzo_models::v1_0::ArazzoDescription;
+use yaml_rust2::YamlLoader;
+fn main() -> anyhow::Result<()> {
+  let path = "/tmp/arazzo.doc";
   let contents = fs::read_to_string(path)?;
   let yaml = YamlLoader::load_from_str(contents.as_str())?;
   let descriptor = ArazzoDescription::try_from(&yaml[0])?;
-# Ok(())
-# }
+  Ok(())
+}
 ```
 
 ## Loading the models from JSON
@@ -25,18 +25,18 @@ You can create a Specification document with the following snippet. This require
 feature flag enabled and uses the `serde_json` crate.
 
 ```rust,no_run
-# use std::fs::File;
-# use std::io::BufReader;
-# use arazzo_models::v1_0::ArazzoDescription;
-# use serde_json::Value;
-# fn main() -> anyhow::Result<()> {
-# let path = "/tmp/path.txt";
+use std::fs::File;
+use std::io::BufReader;
+use arazzo_models::v1_0::ArazzoDescription;
+use serde_json::Value;
+fn main() -> anyhow::Result<()> {
+  let path = "/tmp/arazzo.doc";
   let file = File::open(path)?;
   let reader = BufReader::new(file);
   let json: Value = serde_json::from_reader(reader)?;
   let descriptor = ArazzoDescription::try_from(&json)?;
-# Ok(())
-# }
+  Ok(())
+}
 ```
 
 ## Crate features
