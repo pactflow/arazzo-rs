@@ -229,20 +229,24 @@ pub struct CriterionExpressionType {
 }
 
 /// 4.6.13 Request Body Object
-/// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#fixed-fields-11)
+/// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#request-body-object)
 #[derive(Debug, Clone)]
 pub struct RequestBody {
   /// Content-Type for the request content.
   pub content_type: Option<String>,
   /// Value representing the request body payload.
   pub payload: Option<Rc<dyn Payload + Send + Sync>>,
+  /// List of locations and values to set within a payload
+  pub replacements: Vec<PayloadReplacement>,
   /// Extension values
   pub extensions: HashMap<String, AnyValue>
 }
 
 impl PartialEq for RequestBody {
   fn eq(&self, other: &Self) -> bool {
-    if self.content_type == other.content_type && self.extensions == other.extensions {
+    if self.content_type == other.content_type &&
+       self.extensions == other.extensions &&
+       self.replacements == other.replacements {
       if self.payload.is_none() && other.payload.is_none() {
         true
       } else if let Some(payload) = &self.payload && let Some(other_payload) = &other.payload {
@@ -254,6 +258,18 @@ impl PartialEq for RequestBody {
       false
     }
   }
+}
+
+/// 4.6.14 Payload Replacement Object
+/// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#payload-replacement-object)
+#[derive(Debug, Clone, PartialEq)]
+pub struct PayloadReplacement {
+  /// A JSON Pointer or XPath Expression which must be resolved against the request body.
+  pub target: String,
+  /// The value set within the target location.
+  pub  value: Either<AnyValue, String>,
+  /// Extension values
+  pub extensions: HashMap<String, AnyValue>
 }
 
 #[cfg(test)]
@@ -274,16 +290,19 @@ mod tests {
     let body1 = RequestBody {
       content_type: None,
       payload: None,
+      replacements: vec![],
       extensions: Default::default()
     };
     let body2 = RequestBody {
       content_type: Some("text/plain".to_string()),
       payload: None,
+      replacements: vec![],
       extensions: Default::default()
     };
     let body3 = RequestBody {
       content_type: None,
       payload: None,
+      replacements: vec![],
       extensions: hashmap!{
         "a".to_string() => AnyValue::Integer(100)
       }
@@ -291,6 +310,7 @@ mod tests {
     let body4 = RequestBody {
       content_type: None,
       payload: Some(Rc::new(StringPayload("some text".to_string()))),
+      replacements: vec![],
       extensions: hashmap!{
         "a".to_string() => AnyValue::Integer(100)
       }

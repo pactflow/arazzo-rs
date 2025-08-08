@@ -11,7 +11,7 @@ use yaml_rust2::Yaml;
 
 use crate::extensions::{yaml_extract_extensions, AnyValue};
 use crate::payloads::{EmptyPayload, JsonPayload, Payload, StringPayload};
-use crate::v1_0::{ArazzoDescription, Components, Criterion, CriterionExpressionType, FailureObject, Info, ParameterObject, RequestBody, ReusableObject, SourceDescription, Step, SuccessObject, Workflow};
+use crate::v1_0::{ArazzoDescription, Components, Criterion, CriterionExpressionType, FailureObject, Info, ParameterObject, PayloadReplacement, RequestBody, ReusableObject, SourceDescription, Step, SuccessObject, Workflow};
 
 impl TryFrom<&Yaml> for ArazzoDescription {
   type Error = anyhow::Error;
@@ -278,13 +278,13 @@ impl TryFrom<&Hash> for ParameterObject {
     Ok(ParameterObject {
       name: yaml_hash_require_string(value, "name")?,
       r#in: yaml_hash_lookup_string(value, "in"),
-      value: yaml_load_parameter_value(value, "value")?,
+      value: yaml_load_any_or_expression(value, "value")?,
       extensions: yaml_extract_extensions(value)?
     })
   }
 }
 
-fn yaml_load_parameter_value(hash: &Hash, key: &str) -> anyhow::Result<Either<AnyValue, String>> {
+fn yaml_load_any_or_expression(hash: &Hash, key: &str) -> anyhow::Result<Either<AnyValue, String>> {
   yaml_hash_lookup(hash, key, |v | {
     if let Some(s) = v.as_str() {
       if s.starts_with('$') {
@@ -478,9 +478,11 @@ impl TryFrom<&Yaml> for RequestBody {
     if let Some(hash) = value.as_hash() {
       let content_type = yaml_hash_lookup_string(hash, "contentType");
       let payload = yaml_load_payload(hash, "payload", content_type.as_ref())?;
+      let replacements = yaml_load_replacements(hash, "replacements")?;
       Ok(RequestBody {
         content_type,
         payload,
+        replacements,
         extensions: yaml_extract_extensions(&hash)?
       })
     } else {
@@ -508,6 +510,37 @@ fn yaml_load_payload(
         }))
     }
   }).transpose()
+}
+
+fn yaml_load_replacements(
+  hash: &Hash,
+  key: &str
+) -> anyhow::Result<Vec<PayloadReplacement>> {
+  let array = yaml_hash_lookup(hash, key, |value | value.as_vec().cloned())
+    .unwrap_or_default();
+  let mut replacements = vec![];
+
+  for item in &array {
+    replacements.push(PayloadReplacement::try_from(item)?);
+  }
+
+  Ok(replacements)
+}
+
+impl TryFrom<&Yaml> for PayloadReplacement {
+  type Error = anyhow::Error;
+
+  fn try_from(value: &Yaml) -> Result<Self, Self::Error> {
+    if let Some(hash) = value.as_hash() {
+      Ok(PayloadReplacement {
+        target: yaml_hash_require_string(hash, "target")?,
+        value: yaml_load_any_or_expression(hash, "value")?,
+        extensions: yaml_extract_extensions(hash)?
+      })
+    } else {
+      Err(anyhow!("YAML value must be a Hash, got {}", yaml_type_name(value)))
+    }
+  }
 }
 
 /// Returns the type name of the YAML value
@@ -1342,6 +1375,40 @@ mod tests {
 
     let criterion = CriterionExpressionType::try_from(&Yaml::Hash(hash)).unwrap();
     expect!(criterion.extensions).to(be_equal_to(hashmap!{
+      "one".to_string() => AnyValue::String("1".to_string()),
+      "two".to_string() => AnyValue::Integer(2)
+    }));
+  }
+
+  #[test]
+  fn load_payload_replacement() {
+    let mut hash = Hash::new();
+    hash.insert(Yaml::String("target".to_string()), Yaml::String("/petId".to_string()));
+    hash.insert(Yaml::String("value".to_string()), Yaml::String("$inputs.pet_id".to_string()));
+
+    let payload_replacement = PayloadReplacement::try_from(&Yaml::Hash(hash)).unwrap();
+    expect!(payload_replacement.target).to(be_equal_to("/petId"));
+    expect!(payload_replacement.value).to(be_equal_to(Either::Right("$inputs.pet_id".to_string())));
+
+    let mut hash = Hash::new();
+    hash.insert(Yaml::String("target".to_string()), Yaml::String("/quantity".to_string()));
+    hash.insert(Yaml::String("value".to_string()), Yaml::Integer(10));
+
+    let payload_replacement = PayloadReplacement::try_from(&Yaml::Hash(hash)).unwrap();
+    expect!(payload_replacement.target).to(be_equal_to("/quantity"));
+    expect!(payload_replacement.value).to(be_equal_to(Either::Left(AnyValue::Integer(10))));
+  }
+
+  #[test]
+  fn payload_replacement_supports_extensions() {
+    let mut hash = Hash::new();
+    hash.insert(Yaml::String("target".to_string()), Yaml::String("/petId".to_string()));
+    hash.insert(Yaml::String("value".to_string()), Yaml::String("$inputs.pet_id".to_string()));
+    hash.insert(Yaml::String("x-one".to_string()), Yaml::String("1".to_string()));
+    hash.insert(Yaml::String("x-two".to_string()), Yaml::Integer(2));
+
+    let payload_replacement = PayloadReplacement::try_from(&Yaml::Hash(hash)).unwrap();
+    expect!(payload_replacement.extensions).to(be_equal_to(hashmap!{
       "one".to_string() => AnyValue::String("1".to_string()),
       "two".to_string() => AnyValue::Integer(2)
     }));
