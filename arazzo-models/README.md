@@ -44,3 +44,8 @@ All features are enabled by default
 
 * `yaml`: Enables loading the models from a YAML document (uses yaml-rust2 crate)
 * `json`: Enables loading the models from a JSON document (uses serde_json crate)
+
+## Note on the Arazzo Specification and Any types
+
+The specification has constructs like `Any | {expression}`. This crate only supports values for
+`Any` that can be expressed in JSON form.
