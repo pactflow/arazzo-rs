@@ -164,12 +164,12 @@ pub mod v1_0 {
 
   use std::collections::HashMap;
   use std::rc::Rc;
-  use itertools::Itertools;
+  use itertools::{Either, Itertools};
   use serde::{Serialize, Serializer};
-  use serde::ser::SerializeStruct;
+  use serde::ser::{SerializeMap, SerializeStruct};
   use crate::extensions::AnyValue;
   use crate::payloads::Payload;
-  use crate::v1_0::{Components, Criterion, RequestBody, Step, Workflow};
+  use crate::v1_0::{Components, Criterion, PayloadReplacement, RequestBody, Step, Workflow};
 
   impl Serialize for Workflow {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -212,61 +212,178 @@ pub mod v1_0 {
     where
       S: Serializer
     {
-      let extensions = self.extensions.len();
-      let mut state = serializer.serialize_struct("RequestBody", 2 + extensions)?;
+      let extensions_len = self.extensions.len();
+      let content_type_len = if self.content_type.is_some() { 1 } else { 0 };
+      let payload_len = if self.payload.is_some() { 1 } else { 0 };
+      let replacements_len = if self.replacements.is_empty() { 0 } else { 1 };
 
-      state.serialize_field("contentType", &self.content_type)?;
+      let mut map = serializer.serialize_map(Some(extensions_len +
+        content_type_len + payload_len + replacements_len))?;
 
+      if let Some(content_type) = &self.content_type {
+        map.serialize_entry("contentType", content_type)?;
+      }
       if let Some(payload) = &self.payload {
-        state.serialize_field("payload", &payload.as_string())?;
-      } else {
-        state.skip_field("payload")?;
+        map.serialize_entry("payload", payload.as_ref())?;
+      }
+      if !self.replacements.is_empty() {
+        map.serialize_entry("replacements", &self.replacements)?;
       }
 
       for (k, v) in self.extensions.iter()
         .sorted_by(|(a, _), (b, _)| Ord::cmp(a, b)) {
-        state.serialize_field(k.as_str(), v)?;
+        map.serialize_entry(k, v)?;
       }
 
-      state.end()
+      map.end()
+    }
+  }
+
+  impl Serialize for PayloadReplacement {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+      S: Serializer
+    {
+      let extensions_len = self.extensions.len();
+
+      let mut map = serializer.serialize_map(Some(extensions_len + 2))?;
+
+      map.serialize_entry("target", &self.target)?;
+      match &self.value {
+        Either::Left(any) => map.serialize_entry("value", any)?,
+        Either::Right(exp) => map.serialize_entry("value", exp)?
+      }
+
+      for (k, v) in self.extensions.iter()
+        .sorted_by(|(a, _), (b, _)| Ord::cmp(a, b)) {
+        map.serialize_entry(k, v)?;
+      }
+
+      map.end()
     }
   }
 
   #[cfg(test)]
   mod tests {
+    use std::rc::Rc;
+
     use expectest::prelude::*;
+    use itertools::Either;
+    use maplit::hashmap;
     use pretty_assertions::assert_eq;
     use serde_json::json;
     use trim_margin::MarginTrimmable;
 
-    use crate::v1_0::RequestBody;
+    use crate::extensions::AnyValue;
+    use crate::payloads::StringPayload;
+    use crate::v1_0::{PayloadReplacement, RequestBody};
 
     #[test]
     fn request_body() {
       let body = RequestBody {
         content_type: None,
         payload: None,
+        replacements: vec![],
         extensions: Default::default()
       };
       let json = serde_json::to_string(&body).unwrap();
-      expect!(json).to(be_equal_to(json!({
-        "a": null,
-        "b": 100,
-        "c": {
-          "-1": "A",
-          "0": "B",
-          "1": "C"
+      expect!(json).to(be_equal_to(json!({}).to_string()));
+      let yaml = serde_yaml::to_string(&body).unwrap();
+      assert_eq!(
+        r#"|{}
+           |"#.trim_margin().as_ref().unwrap(), yaml.as_str());
+
+      let body = RequestBody {
+        content_type: Some("application/json".to_string()),
+        payload: Some(Rc::new(StringPayload(r#"
+        {
+          "petOrder": {
+            "petId": "{$inputs.pet_id}",
+            "couponCode": "{$inputs.coupon_code}",
+            "quantity": "{$inputs.quantity}",
+            "status": "placed",
+            "complete": false
+          }
         }
+        "#.to_string()))),
+        replacements: vec![],
+        extensions: hashmap!{
+          "x-one".to_string() => AnyValue::String("one".to_string()),
+          "x-two".to_string() => AnyValue::Integer(2),
+        }
+      };
+      let json = serde_json::to_string(&body).unwrap();
+      expect!(json).to(be_equal_to(json!({
+        "contentType": "application/json",
+        "payload": "\n        {\n          \"petOrder\": {\n            \"petId\": \"{$inputs.pet_id}\",\n            \"couponCode\": \"{$inputs.coupon_code}\",\n            \"quantity\": \"{$inputs.quantity}\",\n            \"status\": \"placed\",\n            \"complete\": false\n          }\n        }\n        ",
+        "x-one": "one",
+        "x-two": 2
       }).to_string()));
       let yaml = serde_yaml::to_string(&body).unwrap();
       assert_eq!(
-        r#"|a: null
-         |b: 100
-         |c:
-         |  '-1': A
-         |  '0': B
-         |  '1': C
-         |"#.trim_margin().as_ref().unwrap(), yaml.as_str());
+        r#"|contentType: application/json
+           |payload: "\n        {\n          \"petOrder\": {\n            \"petId\": \"{$inputs.pet_id}\",\n            \"couponCode\": \"{$inputs.coupon_code}\",\n            \"quantity\": \"{$inputs.quantity}\",\n            \"status\": \"placed\",\n            \"complete\": false\n          }\n        }\n        "
+           |x-one: one
+           |x-two: 2
+           |"#.trim_margin().as_ref().unwrap(), yaml.as_str());
+    }
+
+    #[test]
+    fn payload_replacement() {
+      let payload_replacement = PayloadReplacement {
+        target: "/petId".to_string(),
+        value: Either::Right("$inputs.pet_id".to_string()),
+        extensions: Default::default()
+      };
+      let json = serde_json::to_string(&payload_replacement).unwrap();
+      expect!(json).to(be_equal_to(json!({
+        "target": "/petId",
+        "value": "$inputs.pet_id"
+      }).to_string()));
+      let yaml = serde_yaml::to_string(&payload_replacement).unwrap();
+      assert_eq!(
+        r#"|target: /petId
+           |value: $inputs.pet_id
+           |"#.trim_margin().as_ref().unwrap(), yaml.as_str());
+
+      let payload_replacement = PayloadReplacement {
+        target: "/quantity".to_string(),
+        value: Either::Left(AnyValue::Integer(10)),
+        extensions: Default::default()
+      };
+      let json = serde_json::to_string(&payload_replacement).unwrap();
+      expect!(json).to(be_equal_to(json!({
+        "target": "/quantity",
+        "value": 10
+      }).to_string()));
+      let yaml = serde_yaml::to_string(&payload_replacement).unwrap();
+      assert_eq!(
+        r#"|target: /quantity
+           |value: 10
+           |"#.trim_margin().as_ref().unwrap(), yaml.as_str());
+
+      let payload_replacement = PayloadReplacement {
+        target: "/petId".to_string(),
+        value: Either::Right("$inputs.pet_id".to_string()),
+        extensions: hashmap!{
+          "x-one".to_string() => AnyValue::String("one".to_string()),
+          "x-two".to_string() => AnyValue::Integer(2),
+        }
+      };
+      let json = serde_json::to_string(&payload_replacement).unwrap();
+      expect!(json).to(be_equal_to(json!({
+        "target": "/petId",
+        "value": "$inputs.pet_id",
+        "x-one": "one",
+        "x-two": 2
+      }).to_string()));
+      let yaml = serde_yaml::to_string(&payload_replacement).unwrap();
+      assert_eq!(
+        r#"|target: /petId
+           |value: $inputs.pet_id
+           |x-one: one
+           |x-two: 2
+           |"#.trim_margin().as_ref().unwrap(), yaml.as_str());
     }
   }
 }
