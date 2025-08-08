@@ -1,8 +1,8 @@
 //! Implementations to support serialization of the models using serde
 
 use itertools::Itertools;
-use serde::{Serialize, Serializer};
 use serde::ser::{SerializeMap, SerializeSeq};
+use serde::{Serialize, Serializer};
 
 use crate::extensions::AnyValue;
 
@@ -163,12 +163,12 @@ pub mod v1_0 {
   //! Implementations to support serialization of the 1.0.x models using serde
 
   use itertools::{Either, Itertools};
+  use serde::ser::SerializeMap;
   use serde::{Serialize, Serializer};
-  use serde::ser::{SerializeMap, SerializeStruct};
-  use crate::payloads::Payload;
+
   use crate::v1_0::{
-    Components,
     Criterion,
+    ParameterObject,
     PayloadReplacement,
     RequestBody,
     Step,
@@ -193,12 +193,32 @@ pub mod v1_0 {
     }
   }
 
-  impl Serialize for Components {
+  impl Serialize for ParameterObject {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
       S: Serializer
     {
-      todo!()
+      let extensions_len = self.extensions.len();
+      let in_len = if self.r#in.is_some() { 1 } else { 0 };
+
+      let mut map = serializer.serialize_map(Some(2 + extensions_len +
+        in_len))?;
+
+      if let Some(value) = &self.r#in {
+        map.serialize_entry("in", value)?;
+      }
+      map.serialize_entry("name", &self.name)?;
+      match &self.value {
+        Either::Left(any) => map.serialize_entry("value", any)?,
+        Either::Right(exp) => map.serialize_entry("value", exp)?
+      }
+
+      for (k, v) in self.extensions.iter()
+        .sorted_by(|(a, _), (b, _)| Ord::cmp(a, b)) {
+        map.serialize_entry(k, v)?;
+      }
+
+      map.end()
     }
   }
 
@@ -303,7 +323,7 @@ pub mod v1_0 {
 
     use crate::extensions::AnyValue;
     use crate::payloads::{JsonPayload, StringPayload};
-    use crate::v1_0::{Criterion, CriterionExpressionType, PayloadReplacement, RequestBody};
+    use crate::v1_0::{Criterion, CriterionExpressionType, ParameterObject, PayloadReplacement, RequestBody};
 
     #[test]
     fn request_body() {
@@ -521,6 +541,69 @@ pub mod v1_0 {
            |type:
            |  type: jsonpath
            |  version: draft-goessner-dispatch-jsonpath-00
+           |"#.trim_margin().as_ref().unwrap(), yaml.as_str());
+    }
+
+    #[test]
+    fn parameter_object() {
+      let parameter = ParameterObject {
+        name: "username".to_string(),
+        r#in: Some("query".to_string()),
+        value: Either::Right("$inputs.username".to_string()),
+        extensions: Default::default()
+      };
+      let json = serde_json::to_string(&parameter).unwrap();
+      expect!(json).to(be_equal_to(json!({
+        "name": "username",
+        "in": "query",
+        "value": "$inputs.username"
+      }).to_string()));
+      let yaml = serde_yaml::to_string(&parameter).unwrap();
+      assert_eq!(
+        r#"|in: query
+           |name: username
+           |value: $inputs.username
+           |"#.trim_margin().as_ref().unwrap(), yaml.as_str());
+
+      let parameter = ParameterObject {
+        name: "username".to_string(),
+        r#in: None,
+        value: Either::Right("$inputs.username".to_string()),
+        extensions: hashmap!{
+          "x-one".to_string() => AnyValue::String("one".to_string()),
+          "x-two".to_string() => AnyValue::Integer(2),
+        }
+      };
+      let json = serde_json::to_string(&parameter).unwrap();
+      expect!(json).to(be_equal_to(json!({
+        "name": "username",
+        "value": "$inputs.username",
+        "x-one": "one",
+        "x-two": 2
+      }).to_string()));
+      let yaml = serde_yaml::to_string(&parameter).unwrap();
+      assert_eq!(
+        r#"|name: username
+           |value: $inputs.username
+           |x-one: one
+           |x-two: 2
+           |"#.trim_margin().as_ref().unwrap(), yaml.as_str());
+
+      let parameter = ParameterObject {
+        name: "username".to_string(),
+        r#in: None,
+        value: Either::Left(AnyValue::Integer(1000)),
+        extensions: hashmap!{}
+      };
+      let json = serde_json::to_string(&parameter).unwrap();
+      expect!(json).to(be_equal_to(json!({
+        "name": "username",
+        "value": 1000
+      }).to_string()));
+      let yaml = serde_yaml::to_string(&parameter).unwrap();
+      assert_eq!(
+        r#"|name: username
+           |value: 1000
            |"#.trim_margin().as_ref().unwrap(), yaml.as_str());
     }
   }

@@ -135,6 +135,7 @@ pub struct ParameterObject {
 /// 4.6.7 Success Action Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#success-action-object)
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SuccessObject {
   /// The name of the success action.
   pub name: String,
@@ -148,12 +149,14 @@ pub struct SuccessObject {
   /// List of assertions to determine if this action shall be executed.
   pub criteria: Vec<Criterion>,
   /// Extension values
+  #[serde(flatten)]
   pub extensions: HashMap<String, AnyValue>
 }
 
 /// 4.6.8 Failure Action Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#failure-action-object)
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FailureObject {
   /// The name of the success action.
   pub name: String,
@@ -173,12 +176,13 @@ pub struct FailureObject {
   /// List of assertions to determine if this action shall be executed.
   pub criteria: Vec<Criterion>,
   /// Extension values
+  #[serde(flatten)]
   pub extensions: HashMap<String, AnyValue>
 }
 
 /// 4.6.9 Components Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#components-object)
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct Components {
   /// Object to hold reusable JSON Schema objects to be referenced from workflow inputs.
   pub inputs: HashMap<String, Value>,
@@ -189,6 +193,7 @@ pub struct Components {
   /// Object to hold reusable Failure Actions Objects.
   pub failure_actions: HashMap<String, FailureObject>,
   /// Extension values
+  #[serde(flatten)]
   pub extensions: HashMap<String, AnyValue>
 }
 
