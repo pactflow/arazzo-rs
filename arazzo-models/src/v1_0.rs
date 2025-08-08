@@ -5,14 +5,14 @@ use std::rc::Rc;
 
 use itertools::Either;
 use serde_json::Value;
-
+use serde::Serialize;
 use crate::extensions::AnyValue;
 use crate::payloads::Payload;
 
 
 /// 4.6.1 Arazzo Description is the root object of the loaded specification.
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#arazzo-description)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ArazzoDescription {
   /// Version number of the Arazzo Specification
   pub arazzo: String,
@@ -30,7 +30,7 @@ pub struct ArazzoDescription {
 
 /// 4.6.2 Info Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#info-object)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Info {
   /// A human-readable title of the Arazzo Description.
   pub title: String,
@@ -46,7 +46,7 @@ pub struct Info {
 
 /// 4.6.3 Source Description Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#source-description-object)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct SourceDescription {
   /// Unique name for the source description.
   pub name: String,
@@ -134,7 +134,7 @@ pub struct ParameterObject {
 
 /// 4.6.7 Success Action Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#success-action-object)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct SuccessObject {
   /// The name of the success action.
   pub name: String,
@@ -153,7 +153,7 @@ pub struct SuccessObject {
 
 /// 4.6.8 Failure Action Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#failure-action-object)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct FailureObject {
   /// The name of the success action.
   pub name: String,
@@ -194,7 +194,7 @@ pub struct Components {
 
 /// 4.6.10 Reusable Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#reusable-object)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ReusableObject {
   /// Runtime Expression used to reference the desired object.
   pub reference: String,
@@ -218,7 +218,7 @@ pub struct Criterion {
 
 /// 4.6.12 Criterion Expression Type Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#criterion-expression-type-object)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct CriterionExpressionType {
   /// The type of condition to be applied.
   pub r#type: String,
