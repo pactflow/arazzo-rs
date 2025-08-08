@@ -18,6 +18,7 @@ use crate::v1_0::{
   FailureObject,
   Info,
   ParameterObject,
+  PayloadReplacement,
   RequestBody,
   ReusableObject,
   SourceDescription,
@@ -306,7 +307,7 @@ impl TryFrom<&Value> for ParameterObject {
       Ok(ParameterObject {
         name: json_object_require_string(map, "name")?,
         r#in: json_object_lookup_string(map, "in"),
-        value: json_load_parameter_value(map, "value")?,
+        value: json_load_any_or_expression(map, "value")?,
         extensions: json_extract_extensions(map)?
       })
     } else {
@@ -315,7 +316,7 @@ impl TryFrom<&Value> for ParameterObject {
   }
 }
 
-fn json_load_parameter_value(map: &Map<String, Value>, key: &str) -> anyhow::Result<Either<AnyValue, String>> {
+fn json_load_any_or_expression(map: &Map<String, Value>, key: &str) -> anyhow::Result<Either<AnyValue, String>> {
   if let Some(value) = map.get(key) {
     if let Some(s) = value.as_str() {
       if s.starts_with('$') {
@@ -469,7 +470,6 @@ fn json_load_criteria(map: &Map<String, Value>, key: &str) -> anyhow::Result<Vec
   Ok(criterion)
 }
 
-
 impl TryFrom<&Value> for CriterionExpressionType {
   type Error = anyhow::Error;
 
@@ -503,9 +503,11 @@ impl TryFrom<&Value> for RequestBody {
     if let Some(map) = value.as_object() {
       let content_type = json_object_lookup_string(map, "contentType");
       let payload = json_load_payload(map, "payload", content_type.as_ref())?;
+      let replacements = json_load_replacements(map, "replacements")?;
       Ok(RequestBody {
         content_type,
         payload,
+        replacements,
         extensions: json_extract_extensions(&map)?
       })
     } else {
@@ -527,6 +529,34 @@ fn json_load_payload(
     }
   } else {
     Ok(None)
+  }
+}
+
+fn json_load_replacements(map: &Map<String, Value>, key: &str) -> anyhow::Result<Vec<PayloadReplacement>> {
+  let mut replacements = vec![];
+
+  if let Some(value) = map.get(key) && let Some(array) = value.as_array() {
+    for item in array {
+      replacements.push(PayloadReplacement::try_from(item)?);
+    }
+  }
+
+  Ok(replacements)
+}
+
+impl TryFrom<&Value> for PayloadReplacement {
+  type Error = anyhow::Error;
+
+  fn try_from(value: &Value) -> Result<Self, Self::Error> {
+    if let Some(map) = value.as_object() {
+      Ok(PayloadReplacement {
+        target: json_object_require_string(map, "target")?,
+        value: json_load_any_or_expression(map, "value")?,
+        extensions: json_extract_extensions(map)?
+      })
+    } else {
+      Err(anyhow!("JSON value must be an Object, got {:?}", value))
+    }
   }
 }
 
@@ -1295,6 +1325,43 @@ mod tests {
 
     let criterion = CriterionExpressionType::try_from(&json).unwrap();
     expect!(criterion.extensions).to(be_equal_to(hashmap!{
+      "one".to_string() => AnyValue::String("1".to_string()),
+      "two".to_string() => AnyValue::UInteger(2)
+    }));
+  }
+
+  #[test]
+  fn load_payload_replacement() {
+    let json = json!({
+      "target": "/petId",
+      "value": "$inputs.pet_id"
+    });
+
+    let payload_replacement = PayloadReplacement::try_from(&json).unwrap();
+    expect!(payload_replacement.target).to(be_equal_to("/petId"));
+    expect!(payload_replacement.value).to(be_equal_to(Either::Right("$inputs.pet_id".to_string())));
+
+    let json = json!({
+      "target": "/quantity",
+      "value": 10
+    });
+
+    let payload_replacement = PayloadReplacement::try_from(&json).unwrap();
+    expect!(payload_replacement.target).to(be_equal_to("/quantity"));
+    expect!(payload_replacement.value).to(be_equal_to(Either::Left(AnyValue::UInteger(10))));
+  }
+
+  #[test]
+  fn payload_replacement_supports_extensions() {
+    let json = json!({
+      "target": "/petId",
+      "value": "$inputs.pet_id",
+      "x-one": "1",
+      "x-two": 2
+    });
+
+    let payload_replacement = PayloadReplacement::try_from(&json).unwrap();
+    expect!(payload_replacement.extensions).to(be_equal_to(hashmap!{
       "one".to_string() => AnyValue::String("1".to_string()),
       "two".to_string() => AnyValue::UInteger(2)
     }));
