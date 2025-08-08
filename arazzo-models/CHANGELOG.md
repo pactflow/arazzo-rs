@@ -1,5 +1,12 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.0.5 - Updated docs and added missing PayloadReplacement
+
+* 37841a0 - feat: Added PayloadReplacement (Ronald Holshausen, Fri Aug 8 11:20:15 2025 +1000)
+* cc309f3 - feat: Update readme  examples (Ronald Holshausen, Thu Aug 7 15:54:10 2025 +1000)
+* 401d851 - feat: Add examples to the docs (Ronald Holshausen, Thu Aug 7 15:51:21 2025 +1000)
+* f85e774 - bump version to 0.0.5 (Ronald Holshausen, Thu Aug 7 12:24:39 2025 +1000)
+
 # 0.0.4 - Complete 1.0 spec implementation
 
 * de26784 - feat: Added all fields for Components (Ronald Holshausen, Thu Aug 7 12:16:49 2025 +1000)
