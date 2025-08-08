@@ -225,6 +225,7 @@ pub struct CriterionExpressionType {
   /// A shorthand string representing the version of the expression type being used.
   pub version: String,
   /// Extension values
+  #[serde(flatten)]
   pub extensions: HashMap<String, AnyValue>
 }
 

@@ -162,14 +162,18 @@ mod tests {
 pub mod v1_0 {
   //! Implementations to support serialization of the 1.0.x models using serde
 
-  use std::collections::HashMap;
-  use std::rc::Rc;
   use itertools::{Either, Itertools};
   use serde::{Serialize, Serializer};
   use serde::ser::{SerializeMap, SerializeStruct};
-  use crate::extensions::AnyValue;
   use crate::payloads::Payload;
-  use crate::v1_0::{Components, Criterion, PayloadReplacement, RequestBody, Step, Workflow};
+  use crate::v1_0::{
+    Components,
+    Criterion,
+    PayloadReplacement,
+    RequestBody,
+    Step,
+    Workflow
+  };
 
   impl Serialize for Workflow {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -203,7 +207,30 @@ pub mod v1_0 {
     where
       S: Serializer
     {
-      todo!()
+      let extensions_len = self.extensions.len();
+      let context_len = if self.context.is_some() { 1 } else { 0 };
+      let type_len = if self.r#type.is_some() { 1 } else { 0 };
+
+      let mut map = serializer.serialize_map(Some(1 + extensions_len +
+        context_len + type_len))?;
+
+      map.serialize_entry("condition", &self.condition)?;
+      if let Some(context) = &self.context {
+        map.serialize_entry("context", context)?;
+      }
+      if let Some(condition_type) = &self.r#type {
+        match condition_type {
+          Either::Left(str) => map.serialize_entry("type", str)?,
+          Either::Right(cet) => map.serialize_entry("type", cet)?
+        }
+      }
+
+      for (k, v) in self.extensions.iter()
+        .sorted_by(|(a, _), (b, _)| Ord::cmp(a, b)) {
+        map.serialize_entry(k, v)?;
+      }
+
+      map.end()
     }
   }
 
@@ -275,8 +302,8 @@ pub mod v1_0 {
     use trim_margin::MarginTrimmable;
 
     use crate::extensions::AnyValue;
-    use crate::payloads::StringPayload;
-    use crate::v1_0::{PayloadReplacement, RequestBody};
+    use crate::payloads::{JsonPayload, StringPayload};
+    use crate::v1_0::{Criterion, CriterionExpressionType, PayloadReplacement, RequestBody};
 
     #[test]
     fn request_body() {
@@ -325,6 +352,45 @@ pub mod v1_0 {
            |payload: "\n        {\n          \"petOrder\": {\n            \"petId\": \"{$inputs.pet_id}\",\n            \"couponCode\": \"{$inputs.coupon_code}\",\n            \"quantity\": \"{$inputs.quantity}\",\n            \"status\": \"placed\",\n            \"complete\": false\n          }\n        }\n        "
            |x-one: one
            |x-two: 2
+           |"#.trim_margin().as_ref().unwrap(), yaml.as_str());
+
+      let body = RequestBody {
+        content_type: Some("application/json".to_string()),
+        payload: Some(Rc::new(JsonPayload(json!({
+          "petOrder": {
+            "petId": "{$inputs.pet_id}",
+            "couponCode": "{$inputs.coupon_code}",
+            "quantity": "{$inputs.quantity}",
+            "status": "placed",
+            "complete": false
+          }
+        })))),
+        replacements: vec![],
+        extensions: hashmap!{}
+      };
+      let json = serde_json::to_string(&body).unwrap();
+      expect!(json).to(be_equal_to(json!({
+        "contentType": "application/json",
+        "payload": {
+          "petOrder": {
+            "petId": "{$inputs.pet_id}",
+            "couponCode": "{$inputs.coupon_code}",
+            "quantity": "{$inputs.quantity}",
+            "status": "placed",
+            "complete": false
+          }
+        }
+      }).to_string()));
+      let yaml = serde_yaml::to_string(&body).unwrap();
+      assert_eq!(
+        r#"|contentType: application/json
+           |payload:
+           |  petOrder:
+           |    complete: false
+           |    couponCode: '{$inputs.coupon_code}'
+           |    petId: '{$inputs.pet_id}'
+           |    quantity: '{$inputs.quantity}'
+           |    status: placed
            |"#.trim_margin().as_ref().unwrap(), yaml.as_str());
     }
 
@@ -383,6 +449,78 @@ pub mod v1_0 {
            |value: $inputs.pet_id
            |x-one: one
            |x-two: 2
+           |"#.trim_margin().as_ref().unwrap(), yaml.as_str());
+    }
+
+    #[test]
+    fn criterion() {
+      let criterion = Criterion {
+        context: None,
+        condition: "$statusCode == 200".to_string(),
+        r#type: None,
+        extensions: Default::default()
+      };
+      let json = serde_json::to_string(&criterion).unwrap();
+      expect!(json).to(be_equal_to(json!({
+        "condition": "$statusCode == 200"
+      }).to_string()));
+      let yaml = serde_yaml::to_string(&criterion).unwrap();
+      assert_eq!(
+        r#"|condition: $statusCode == 200
+           |"#.trim_margin().as_ref().unwrap(), yaml.as_str());
+
+      let criterion = Criterion {
+        context: Some("$statusCode".to_string()),
+        condition: "^200$".to_string(),
+        r#type: Some(Either::Left("regex".to_string())),
+        extensions: hashmap!{
+          "x-one".to_string() => AnyValue::String("one".to_string()),
+          "x-two".to_string() => AnyValue::Integer(2),
+        }
+      };
+      let json = serde_json::to_string(&criterion).unwrap();
+      expect!(json).to(be_equal_to(json!({
+        "condition": "^200$",
+        "context": "$statusCode",
+        "type": "regex",
+        "x-one": "one",
+        "x-two": 2
+      }).to_string()));
+      let yaml = serde_yaml::to_string(&criterion).unwrap();
+      assert_eq!(
+        r#"|condition: ^200$
+           |context: $statusCode
+           |type: regex
+           |x-one: one
+           |x-two: 2
+           |"#.trim_margin().as_ref().unwrap(), yaml.as_str());
+
+      let criterion = Criterion {
+        context: Some("$response.body".to_string()),
+        condition: "$[?count(@.pets) > 0]".to_string(),
+        r#type: Some(Either::Right(CriterionExpressionType {
+          r#type: "jsonpath".to_string(),
+          version: "draft-goessner-dispatch-jsonpath-00".to_string(),
+          extensions: Default::default()
+        })),
+        extensions: Default::default()
+      };
+      let json = serde_json::to_string(&criterion).unwrap();
+      expect!(json).to(be_equal_to(json!({
+        "condition": "$[?count(@.pets) > 0]",
+        "context": "$response.body",
+        "type": {
+          "type": "jsonpath",
+          "version": "draft-goessner-dispatch-jsonpath-00"
+        }
+      }).to_string()));
+      let yaml = serde_yaml::to_string(&criterion).unwrap();
+      assert_eq!(
+        r#"|condition: $[?count(@.pets) > 0]
+           |context: $response.body
+           |type:
+           |  type: jsonpath
+           |  version: draft-goessner-dispatch-jsonpath-00
            |"#.trim_margin().as_ref().unwrap(), yaml.as_str());
     }
   }
