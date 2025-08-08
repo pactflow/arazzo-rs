@@ -14,8 +14,8 @@
 //!   let contents = fs::read_to_string(path)?;
 //!   let yaml = YamlLoader::load_from_str(contents.as_str())?;
 //!   let descriptor = ArazzoDescription::try_from(&yaml[0])?;
-//!   # Ok(())
-//!   # }
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ## Loading the models from JSON
@@ -34,8 +34,8 @@
 //!   let reader = BufReader::new(file);
 //!   let json: Value = serde_json::from_reader(reader)?;
 //!   let descriptor = ArazzoDescription::try_from(&json)?;
-//!   # Ok(())
-//!   # }
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ## Crate features
