@@ -225,8 +225,102 @@ pub mod v1_0 {
 
   use serde::ser::SerializeMap;
   use serde::{Serialize, Serializer};
+
   use crate::either::Either;
   use crate::v1_0::*;
+
+  impl Serialize for ArazzoDescription {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+      S: Serializer
+    {
+      let extensions_len = self.extensions.len();
+      let components_len = if self.components.is_empty() { 0 } else { 1 };
+
+      let mut map = serializer.serialize_map(Some(4 + extensions_len +
+        components_len))?;
+
+      map.serialize_entry("arazzo", &self.arazzo)?;
+
+      if !self.components.is_empty() {
+        map.serialize_entry("components", &self.components)?;
+      }
+
+      map.serialize_entry("info", &self.info)?;
+      map.serialize_entry("sourceDescriptions", &self.source_descriptions)?;
+      map.serialize_entry("workflows", &self.workflows)?;
+
+      let mut extensions = self.extensions.iter().collect::<Vec<_>>();
+      extensions.sort_by(|(a, _), (b, _)| Ord::cmp(a, b));
+      for (k, v) in extensions {
+        map.serialize_entry(k, v)?;
+      }
+
+      map.end()
+    }
+  }
+
+  impl Serialize for Info {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+      S: Serializer
+    {
+      let extensions_len = self.extensions.len();
+      let summary_len = if self.summary.is_some() { 1 } else { 0 };
+      let description_len = if self.description.is_some() { 1 } else { 0 };
+
+      let mut map = serializer.serialize_map(Some(2 + extensions_len +
+        summary_len + description_len))?;
+
+      if let Some(value) = &self.description {
+        map.serialize_entry("description", value)?;
+      }
+
+      if let Some(value) = &self.summary {
+        map.serialize_entry("summary", value)?;
+      }
+
+      map.serialize_entry("title", &self.title)?;
+      map.serialize_entry("version", &self.version)?;
+
+      let mut extensions = self.extensions.iter().collect::<Vec<_>>();
+      extensions.sort_by(|(a, _), (b, _)| Ord::cmp(a, b));
+      for (k, v) in extensions {
+        map.serialize_entry(k, v)?;
+      }
+
+      map.end()
+    }
+  }
+
+  impl Serialize for SourceDescription {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+      S: Serializer
+    {
+      let extensions_len = self.extensions.len();
+      let type_len = if self.r#type.is_some() { 1 } else { 0 };
+
+      let mut map = serializer.serialize_map(Some(2 + extensions_len +
+        type_len))?;
+
+      map.serialize_entry("name", &self.name)?;
+
+      if let Some(value) = &self.r#type {
+        map.serialize_entry("type", value)?;
+      }
+
+      map.serialize_entry("url", &self.url)?;
+
+      let mut extensions = self.extensions.iter().collect::<Vec<_>>();
+      extensions.sort_by(|(a, _), (b, _)| Ord::cmp(a, b));
+      for (k, v) in extensions {
+        map.serialize_entry(k, v)?;
+      }
+
+      map.end()
+    }
+  }
 
   impl Serialize for Workflow {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -605,6 +699,46 @@ pub mod v1_0 {
 
       if let Some(value) = &self.retry_limit {
         map.serialize_entry("retryLimit", value)?;
+      }
+
+      let mut extensions = self.extensions.iter().collect::<Vec<_>>();
+      extensions.sort_by(|(a, _), (b, _)| Ord::cmp(a, b));
+      for (k, v) in extensions {
+        map.serialize_entry(k, v)?;
+      }
+
+      map.end()
+    }
+  }
+
+  impl Serialize for Components {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+      S: Serializer
+    {
+      let extensions_len = self.extensions.len();
+      let inputs_len = if self.inputs.is_empty() { 0 } else { 1 };
+      let parameters_len = if self.parameters.is_empty() { 0 } else { 1 };
+      let success_actions_len = if self.success_actions.is_empty() { 0 } else { 1 };
+      let failure_actions_len = if self.failure_actions.is_empty() { 0 } else { 1 };
+
+      let mut map = serializer.serialize_map(Some(extensions_len +
+        inputs_len + parameters_len + success_actions_len + failure_actions_len))?;
+
+      if !self.failure_actions.is_empty() {
+        map.serialize_entry("failureActions", &self.failure_actions)?;
+      }
+
+      if !self.inputs.is_empty() {
+        map.serialize_entry("inputs", &self.inputs)?;
+      }
+
+      if !self.parameters.is_empty() {
+        map.serialize_entry("parameters", &self.parameters)?;
+      }
+
+      if !self.success_actions.is_empty() {
+        map.serialize_entry("success_actions", &self.success_actions)?;
       }
 
       let mut extensions = self.extensions.iter().collect::<Vec<_>>();

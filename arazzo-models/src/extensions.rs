@@ -39,6 +39,42 @@ pub enum AnyValue {
   Object(HashMap<String, AnyValue>)
 }
 
+impl From<&str> for AnyValue {
+  fn from(value: &str) -> Self {
+    AnyValue::String(value.to_string())
+  }
+}
+
+impl From<&String> for AnyValue {
+  fn from(value: &String) -> Self {
+    AnyValue::String(value.clone())
+  }
+}
+
+impl From<i64> for AnyValue {
+  fn from(value: i64) -> Self {
+    AnyValue::Integer(value)
+  }
+}
+
+impl From<u64> for AnyValue {
+  fn from(value: u64) -> Self {
+    AnyValue::UInteger(value)
+  }
+}
+
+impl From<f64> for AnyValue {
+  fn from(value: f64) -> Self {
+    AnyValue::Float(value)
+  }
+}
+
+impl From<bool> for AnyValue {
+  fn from(value: bool) -> Self {
+    AnyValue::Boolean(value)
+  }
+}
+
 #[cfg(feature = "yaml")]
 impl TryFrom<&Yaml> for AnyValue {
   type Error = anyhow::Error;

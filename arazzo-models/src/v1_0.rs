@@ -9,6 +9,7 @@ use crate::either::Either;
 use crate::extensions::AnyValue;
 use crate::payloads::Payload;
 
+const LATEST_SPEC_VERSION: &str = "1.0.1";
 
 /// 4.6.1 Arazzo Description is the root object of the loaded specification.
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#arazzo-description)
@@ -25,12 +26,25 @@ pub struct ArazzoDescription {
   /// An element to hold shared schemas.
   pub components: Components,
   /// Extension values
-  pub extensions: HashMap<String, AnyValue>,
+  pub extensions: HashMap<String, AnyValue>
+}
+
+impl Default for ArazzoDescription {
+  fn default() -> Self {
+    ArazzoDescription {
+      arazzo: LATEST_SPEC_VERSION.to_string(),
+      info: Default::default(),
+      source_descriptions: vec![],
+      workflows: vec![],
+      components: Default::default(),
+      extensions: Default::default()
+    }
+  }
 }
 
 /// 4.6.2 Info Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#info-object)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Info {
   /// A human-readable title of the Arazzo Description.
   pub title: String,
@@ -46,7 +60,7 @@ pub struct Info {
 
 /// 4.6.3 Source Description Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#source-description-object)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct SourceDescription {
   /// Unique name for the source description.
   pub name: String,
@@ -132,6 +146,17 @@ pub struct ParameterObject {
   pub extensions: HashMap<String, AnyValue>
 }
 
+impl Default for ParameterObject {
+  fn default() -> Self {
+    ParameterObject {
+      name: "".to_string(),
+      r#in: None,
+      value: Either::First(AnyValue::Null),
+      extensions: Default::default()
+    }
+  }
+}
+
 /// 4.6.7 Success Action Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#success-action-object)
 #[derive(Debug, Clone, PartialEq)]
@@ -192,6 +217,17 @@ pub struct Components {
   pub extensions: HashMap<String, AnyValue>
 }
 
+impl Components {
+  /// Convenience function to determine if all the fields are empty
+  pub fn is_empty(&self) -> bool {
+    self.inputs.is_empty() &&
+      self.parameters.is_empty() &&
+      self.success_actions.is_empty() &&
+      self.failure_actions.is_empty() &&
+      self.extensions.is_empty()
+  }
+}
+
 /// 4.6.10 Reusable Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#reusable-object)
 #[derive(Debug, Clone, PartialEq)]
@@ -204,7 +240,7 @@ pub struct ReusableObject {
 
 /// 4.6.11 Criterion Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#criterion-object)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Criterion {
   /// Runtime Expression used to set the context for the condition to be applied on.
   pub context: Option<String>,
