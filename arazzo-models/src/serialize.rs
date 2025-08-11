@@ -1,9 +1,10 @@
 //! Implementations to support serialization of the models using serde
 
-use itertools::Itertools;
+use std::fmt::Debug;
 use serde::ser::{SerializeMap, SerializeSeq};
 use serde::{Serialize, Serializer};
 
+use crate::either::Either;
 use crate::extensions::AnyValue;
 
 impl Serialize for AnyValue {
@@ -27,12 +28,27 @@ impl Serialize for AnyValue {
       }
       AnyValue::Object(o) => {
         let mut map = serializer.serialize_map(Some(o.len()))?;
-        for (k, v) in o.iter()
-          .sorted_by(|(a, _), (b, _)| Ord::cmp(a, b)) {
+        let mut entries = o.iter().collect::<Vec<_>>();
+        entries.sort_by(|(a, _), (b, _)| Ord::cmp(a, b));
+        for (k, v) in entries {
           map.serialize_entry(k, v)?;
         }
         map.end()
       }
+    }
+  }
+}
+
+impl <A, B> Serialize for Either<A, B>
+  where A: Debug + Clone + PartialEq + Serialize,
+        B: Debug + Clone + PartialEq + Serialize {
+  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+  where
+    S: Serializer
+  {
+    match self {
+      Either::First(a) => a.serialize(serializer),
+      Either::Second(b) => b.serialize(serializer)
     }
   }
 }
@@ -162,10 +178,10 @@ mod tests {
 pub mod v1_0 {
   //! Implementations to support serialization of the 1.0.x models using serde
 
-  use itertools::{Either, Itertools};
   use serde::ser::SerializeMap;
   use serde::{Serialize, Serializer};
 
+  use crate::either::Either;
   use crate::v1_0::{
     Criterion,
     ParameterObject,
@@ -189,7 +205,71 @@ pub mod v1_0 {
     where
       S: Serializer
     {
-      todo!()
+      let extensions_len = self.extensions.len();
+      let operation_id_len = if self.operation_id.is_some() { 1 } else { 0 };
+      let operation_path_len = if self.operation_path.is_some() { 1 } else { 0 };
+      let workflow_id_len = if self.workflow_id.is_some() { 1 } else { 0 };
+      let description_len = if self.description.is_some() { 1 } else { 0 };
+      let parameters_len = if self.parameters.is_empty() { 0 } else { 1 };
+      let request_body_len = if self.request_body.is_some() { 1 } else { 0 };
+      let success_criteria_len = if self.success_criteria.is_empty() { 0 } else { 1 };
+      let on_success_len = if self.on_success.is_empty() { 0 } else { 1 };
+      let on_failure_len = if self.on_failure.is_empty() { 0 } else { 1 };
+      let outputs_len = if self.parameters.is_empty() { 0 } else { 1 };
+
+      let mut map = serializer.serialize_map(Some(1 + extensions_len +
+        operation_id_len + operation_path_len + workflow_id_len + description_len + parameters_len +
+        request_body_len + success_criteria_len + on_success_len + on_failure_len + outputs_len))?;
+
+      if let Some(value) = &self.description {
+        map.serialize_entry("description", value)?;
+      }
+
+      if !self.on_failure.is_empty() {
+        map.serialize_entry("onFailure", &self.on_failure)?;
+      }
+
+      if !self.on_success.is_empty() {
+        map.serialize_entry("onSuccess", &self.on_success)?;
+      }
+
+      if let Some(value) = &self.operation_id {
+        map.serialize_entry("operationId", value)?;
+      }
+
+      if let Some(value) = &self.operation_path {
+        map.serialize_entry("operationPath", value)?;
+      }
+
+      if !self.outputs.is_empty() {
+        map.serialize_entry("outputs", &self.outputs)?;
+      }
+
+      if !self.parameters.is_empty() {
+        map.serialize_entry("parameters", &self.parameters)?;
+      }
+
+      if let Some(value) = &self.request_body {
+        map.serialize_entry("requestBody", value)?;
+      }
+
+      map.serialize_entry("stepId", &self.step_id)?;
+
+      if !self.success_criteria.is_empty() {
+        map.serialize_entry("successCriteria", &self.success_criteria)?;
+      }
+
+      if let Some(value) = &self.workflow_id {
+        map.serialize_entry("workflowId", value)?;
+      }
+
+      let mut extensions = self.extensions.iter().collect::<Vec<_>>();
+      extensions.sort_by(|(a, _), (b, _)| Ord::cmp(a, b));
+      for (k, v) in extensions {
+        map.serialize_entry(k, v)?;
+      }
+
+      map.end()
     }
   }
 
@@ -209,12 +289,13 @@ pub mod v1_0 {
       }
       map.serialize_entry("name", &self.name)?;
       match &self.value {
-        Either::Left(any) => map.serialize_entry("value", any)?,
-        Either::Right(exp) => map.serialize_entry("value", exp)?
+        Either::First(any) => map.serialize_entry("value", any)?,
+        Either::Second(exp) => map.serialize_entry("value", exp)?
       }
 
-      for (k, v) in self.extensions.iter()
-        .sorted_by(|(a, _), (b, _)| Ord::cmp(a, b)) {
+      let mut extensions = self.extensions.iter().collect::<Vec<_>>();
+      extensions.sort_by(|(a, _), (b, _)| Ord::cmp(a, b));
+      for (k, v) in extensions {
         map.serialize_entry(k, v)?;
       }
 
@@ -240,13 +321,14 @@ pub mod v1_0 {
       }
       if let Some(condition_type) = &self.r#type {
         match condition_type {
-          Either::Left(str) => map.serialize_entry("type", str)?,
-          Either::Right(cet) => map.serialize_entry("type", cet)?
+          Either::First(str) => map.serialize_entry("type", str)?,
+          Either::Second(cet) => map.serialize_entry("type", cet)?
         }
       }
 
-      for (k, v) in self.extensions.iter()
-        .sorted_by(|(a, _), (b, _)| Ord::cmp(a, b)) {
+      let mut extensions = self.extensions.iter().collect::<Vec<_>>();
+      extensions.sort_by(|(a, _), (b, _)| Ord::cmp(a, b));
+      for (k, v) in extensions {
         map.serialize_entry(k, v)?;
       }
 
@@ -277,8 +359,9 @@ pub mod v1_0 {
         map.serialize_entry("replacements", &self.replacements)?;
       }
 
-      for (k, v) in self.extensions.iter()
-        .sorted_by(|(a, _), (b, _)| Ord::cmp(a, b)) {
+      let mut extensions = self.extensions.iter().collect::<Vec<_>>();
+      extensions.sort_by(|(a, _), (b, _)| Ord::cmp(a, b));
+      for (k, v) in extensions {
         map.serialize_entry(k, v)?;
       }
 
@@ -297,12 +380,13 @@ pub mod v1_0 {
 
       map.serialize_entry("target", &self.target)?;
       match &self.value {
-        Either::Left(any) => map.serialize_entry("value", any)?,
-        Either::Right(exp) => map.serialize_entry("value", exp)?
+        Either::First(any) => map.serialize_entry("value", any)?,
+        Either::Second(exp) => map.serialize_entry("value", exp)?
       }
 
-      for (k, v) in self.extensions.iter()
-        .sorted_by(|(a, _), (b, _)| Ord::cmp(a, b)) {
+      let mut extensions = self.extensions.iter().collect::<Vec<_>>();
+      extensions.sort_by(|(a, _), (b, _)| Ord::cmp(a, b));
+      for (k, v) in extensions {
         map.serialize_entry(k, v)?;
       }
 
@@ -315,15 +399,22 @@ pub mod v1_0 {
     use std::rc::Rc;
 
     use expectest::prelude::*;
-    use itertools::Either;
-    use maplit::hashmap;
+    use maplit::{btreemap, hashmap};
     use pretty_assertions::assert_eq;
     use serde_json::json;
     use trim_margin::MarginTrimmable;
 
+    use crate::either::Either;
     use crate::extensions::AnyValue;
     use crate::payloads::{JsonPayload, StringPayload};
-    use crate::v1_0::{Criterion, CriterionExpressionType, ParameterObject, PayloadReplacement, RequestBody};
+    use crate::v1_0::{
+      Criterion,
+      CriterionExpressionType,
+      ParameterObject,
+      PayloadReplacement,
+      RequestBody,
+      Step
+    };
 
     #[test]
     fn request_body() {
@@ -418,7 +509,7 @@ pub mod v1_0 {
     fn payload_replacement() {
       let payload_replacement = PayloadReplacement {
         target: "/petId".to_string(),
-        value: Either::Right("$inputs.pet_id".to_string()),
+        value: Either::Second("$inputs.pet_id".to_string()),
         extensions: Default::default()
       };
       let json = serde_json::to_string(&payload_replacement).unwrap();
@@ -434,7 +525,7 @@ pub mod v1_0 {
 
       let payload_replacement = PayloadReplacement {
         target: "/quantity".to_string(),
-        value: Either::Left(AnyValue::Integer(10)),
+        value: Either::First(AnyValue::Integer(10)),
         extensions: Default::default()
       };
       let json = serde_json::to_string(&payload_replacement).unwrap();
@@ -450,7 +541,7 @@ pub mod v1_0 {
 
       let payload_replacement = PayloadReplacement {
         target: "/petId".to_string(),
-        value: Either::Right("$inputs.pet_id".to_string()),
+        value: Either::Second("$inputs.pet_id".to_string()),
         extensions: hashmap!{
           "x-one".to_string() => AnyValue::String("one".to_string()),
           "x-two".to_string() => AnyValue::Integer(2),
@@ -492,7 +583,7 @@ pub mod v1_0 {
       let criterion = Criterion {
         context: Some("$statusCode".to_string()),
         condition: "^200$".to_string(),
-        r#type: Some(Either::Left("regex".to_string())),
+        r#type: Some(Either::First("regex".to_string())),
         extensions: hashmap!{
           "x-one".to_string() => AnyValue::String("one".to_string()),
           "x-two".to_string() => AnyValue::Integer(2),
@@ -518,7 +609,7 @@ pub mod v1_0 {
       let criterion = Criterion {
         context: Some("$response.body".to_string()),
         condition: "$[?count(@.pets) > 0]".to_string(),
-        r#type: Some(Either::Right(CriterionExpressionType {
+        r#type: Some(Either::Second(CriterionExpressionType {
           r#type: "jsonpath".to_string(),
           version: "draft-goessner-dispatch-jsonpath-00".to_string(),
           extensions: Default::default()
@@ -549,7 +640,7 @@ pub mod v1_0 {
       let parameter = ParameterObject {
         name: "username".to_string(),
         r#in: Some("query".to_string()),
-        value: Either::Right("$inputs.username".to_string()),
+        value: Either::Second("$inputs.username".to_string()),
         extensions: Default::default()
       };
       let json = serde_json::to_string(&parameter).unwrap();
@@ -568,7 +659,7 @@ pub mod v1_0 {
       let parameter = ParameterObject {
         name: "username".to_string(),
         r#in: None,
-        value: Either::Right("$inputs.username".to_string()),
+        value: Either::Second("$inputs.username".to_string()),
         extensions: hashmap!{
           "x-one".to_string() => AnyValue::String("one".to_string()),
           "x-two".to_string() => AnyValue::Integer(2),
@@ -592,7 +683,7 @@ pub mod v1_0 {
       let parameter = ParameterObject {
         name: "username".to_string(),
         r#in: None,
-        value: Either::Left(AnyValue::Integer(1000)),
+        value: Either::First(AnyValue::Integer(1000)),
         extensions: hashmap!{}
       };
       let json = serde_json::to_string(&parameter).unwrap();
@@ -604,6 +695,121 @@ pub mod v1_0 {
       assert_eq!(
         r#"|name: username
            |value: 1000
+           |"#.trim_margin().as_ref().unwrap(), yaml.as_str());
+    }
+
+    #[test]
+    fn step_object() {
+      let step = Step {
+        step_id: "loginStep".to_string(),
+        operation_id: Some("loginUser".to_string()),
+        operation_path: None,
+        workflow_id: None,
+        description: Some("This step demonstrates the user login step".to_string()),
+        parameters: vec![
+          Either::First(ParameterObject {
+            name: "username".to_string(),
+            r#in: Some("query".to_string()),
+            value: Either::Second("$inputs.username".to_string()),
+            extensions: Default::default()
+          }),
+          Either::First(ParameterObject {
+            name: "password".to_string(),
+            r#in: Some("query".to_string()),
+            value: Either::Second("$inputs.password".to_string()),
+            extensions: Default::default()
+          })
+        ],
+        request_body: None,
+        success_criteria: vec![
+          Criterion {
+            context: None,
+            condition: "$statusCode == 200".to_string(),
+            r#type: None,
+            extensions: Default::default(),
+          }
+        ],
+        on_success: vec![],
+        on_failure: vec![],
+        outputs: btreemap!{
+          "tokenExpires".to_string() => "$response.header.X-Expires-After".to_string(),
+          "rateLimit".to_string() => "$response.header.X-Rate-Limit".to_string()
+        },
+        extensions: Default::default()
+      };
+      let json = serde_json::to_string(&step).unwrap();
+      assert_eq!(json!({
+        "stepId": "loginStep",
+        "description": "This step demonstrates the user login step",
+        "operationId": "loginUser",
+        "parameters": [
+          {
+            "name": "username",
+            "in": "query",
+            "value": "$inputs.username"
+          }, {
+            "name": "password",
+            "in": "query",
+            "value": "$inputs.password"
+          }
+        ],
+        "successCriteria": [
+          {
+            "condition": "$statusCode == 200"
+          }
+        ],
+        "outputs": {
+          "tokenExpires": "$response.header.X-Expires-After",
+          "rateLimit": "$response.header.X-Rate-Limit"
+        }
+      }).to_string(), json);
+      let yaml = serde_yaml::to_string(&step).unwrap();
+      assert_eq!(
+        r#"|description: This step demonstrates the user login step
+           |operationId: loginUser
+           |outputs:
+           |  rateLimit: $response.header.X-Rate-Limit
+           |  tokenExpires: $response.header.X-Expires-After
+           |parameters:
+           |- in: query
+           |  name: username
+           |  value: $inputs.username
+           |- in: query
+           |  name: password
+           |  value: $inputs.password
+           |stepId: loginStep
+           |successCriteria:
+           |- condition: $statusCode == 200
+           |"#.trim_margin().as_ref().unwrap(), yaml.as_str());
+
+      let step = Step {
+        step_id: "test-extensions".to_string(),
+        operation_id: None,
+        operation_path: None,
+        workflow_id: None,
+        description: None,
+        parameters: vec![],
+        request_body: None,
+        success_criteria: vec![],
+        on_success: vec![],
+        on_failure: vec![],
+        outputs: Default::default(),
+        extensions: hashmap!{
+          "x-one".to_string() => AnyValue::String("one".to_string()),
+          "x-two".to_string() => AnyValue::Integer(2),
+        }
+      };
+      let json = serde_json::to_string(&step).unwrap();
+      expect!(json).to(be_equal_to(json!({
+        "stepId": "test-extensions",
+        "x-one": "one",
+        "x-two": 2
+      }).to_string()));
+      let yaml = serde_yaml::to_string(&step).unwrap();
+      assert_eq!(
+        r#"|stepId: test-extensions
+           |x-one: one
+           |x-two: 2
            |"#.trim_margin().as_ref().unwrap(), yaml.as_str());
     }
   }

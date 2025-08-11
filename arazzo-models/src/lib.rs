@@ -56,6 +56,6 @@ pub mod v1_0;
 pub mod extensions;
 pub mod payloads;
 pub mod either;
-pub mod serialise;
+pub mod serialize;
 #[cfg(feature = "json")] pub mod json;
 #[cfg(feature = "yaml")] pub mod yaml;

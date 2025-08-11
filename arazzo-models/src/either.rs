@@ -1,10 +1,13 @@
 //! Enum to store a value that can be either one or another value
 
 use std::fmt::Debug;
+use serde::Serialize;
 
 /// Type that can be either A or B
 #[derive(Debug, Clone, PartialEq)]
-pub enum Either<A, B> where A: Debug + Clone + PartialEq, B: Debug + Clone + PartialEq {
+pub enum Either<A, B>
+  where A: Debug + Clone + PartialEq + Serialize,
+        B: Debug + Clone + PartialEq + Serialize {
   /// First value (A)
   First(A),
 
@@ -12,7 +15,9 @@ pub enum Either<A, B> where A: Debug + Clone + PartialEq, B: Debug + Clone + Par
   Second(B)
 }
 
-impl <A, B> Either<A, B>  where A: Debug + Clone + PartialEq, B: Debug + Clone + PartialEq {
+impl <A, B> Either<A, B>
+  where A: Debug + Clone + PartialEq + Serialize,
+        B: Debug + Clone + PartialEq + Serialize {
   /// If the value is an A
   pub fn is_first(&self) -> bool {
     match self {

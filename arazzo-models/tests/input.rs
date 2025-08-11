@@ -1,5 +1,5 @@
 use expectest::prelude::*;
-use maplit::hashmap;
+use maplit::{btreemap, hashmap};
 use serde_json::{json, Value};
 use yaml_rust2::YamlLoader;
 
@@ -202,7 +202,7 @@ fn loads_the_main_spec_descriptors_from_yaml() {
       }
     }
   })));
-  expect!(workflow.outputs.clone()).to(be_equal_to(hashmap!{
+  expect!(workflow.outputs.clone()).to(be_equal_to(btreemap!{
     "available".to_string() => "$steps.getPetStep.outputs.availablePets".to_string()
   }));
 
@@ -229,7 +229,7 @@ fn loads_the_main_spec_descriptors_from_yaml() {
       extensions: Default::default()
     })
   ]));
-  expect!(step1.outputs.clone()).to(be_equal_to(hashmap!{
+  expect!(step1.outputs.clone()).to(be_equal_to(btreemap!{
     "sessionToken".to_string() => "$response.body".to_string(),
     "tokenExpires".to_string() => "$response.header.X-Expires-After".to_string(),
     "rateLimit".to_string() => "$response.header.X-Rate-Limit".to_string()
@@ -263,7 +263,7 @@ fn loads_the_main_spec_descriptors_from_yaml() {
       extensions: Default::default()
     })
   ]));
-  expect!(step2.outputs.clone()).to(be_equal_to(hashmap!{
+  expect!(step2.outputs.clone()).to(be_equal_to(btreemap!{
     "availablePets".to_string() => "$response.body".to_string()
   }));
   expect!(step2.success_criteria.clone()).to(be_equal_to(vec![

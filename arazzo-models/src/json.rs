@@ -1,10 +1,10 @@
 //! Functions and Traits for loading Arazzo objects from a JSON document
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use anyhow::anyhow;
-use maplit::hashmap;
+use maplit::{btreemap, hashmap};
 use serde_json::{Map, Value};
 
 use crate::either::Either;
@@ -244,14 +244,14 @@ fn json_load_failure_actions(map: &Map<String, Value>) -> anyhow::Result<Vec<Eit
   }
 }
 
-fn json_load_outputs(map: &Map<String, Value>) -> HashMap<String, String> {
+fn json_load_outputs(map: &Map<String, Value>) -> BTreeMap<String, String> {
   map.get("outputs").map(|v | {
     if let Some(outputs) = v.as_object() {
       outputs.iter()
         .filter_map(|(k, v)| v.as_str().map(|v| (k.clone(), v.to_string())))
         .collect()
     } else {
-      hashmap!{}
+      btreemap!{}
     }
   }).unwrap_or_default()
 }
@@ -666,7 +666,7 @@ mod tests {
   use std::any::Any;
 
   use expectest::prelude::*;
-  use maplit::hashmap;
+  use maplit::{btreemap, hashmap};
   use pretty_assertions::assert_eq;
   use serde_json::{json, Value};
 
@@ -1104,7 +1104,7 @@ mod tests {
     });
 
     let wf = Workflow::try_from(&json).unwrap();
-    expect!(wf.outputs).to(be_equal_to(hashmap!{
+    expect!(wf.outputs).to(be_equal_to(btreemap!{
       "tokenExpires".to_string() => "$response.header.X-Expires-After".to_string(),
       "rateLimit".to_string() => "$response.header.X-Rate-Limit".to_string()
     }));

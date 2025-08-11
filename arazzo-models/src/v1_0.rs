@@ -1,6 +1,6 @@
 //! Version 1.0.x specification models (<https://spec.openapis.org/arazzo/v1.0.1.html>)
 
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 use std::rc::Rc;
 
 use serde_json::Value;
@@ -80,7 +80,7 @@ pub struct Workflow {
   /// List of success actions that are applicable for all steps described under the workflow.
   pub failure_actions: Vec<Either<FailureObject, ReusableObject>>,
   /// Defined outputs of the workflow.
-  pub outputs: HashMap<String, String>,
+  pub outputs: BTreeMap<String, String>,
   /// List of parameters that are applicable for all steps described under the workflow.
   pub parameters: Vec<Either<ParameterObject, ReusableObject>>,
   /// Extension values
@@ -114,7 +114,7 @@ pub struct Step {
   /// Array of failure action objects that specify what to do upon step failure.
   pub on_failure: Vec<Either<FailureObject, ReusableObject>>,
   /// Defined outputs of the step.
-  pub outputs: HashMap<String, String>,
+  pub outputs: BTreeMap<String, String>,
   /// Extension values
   pub extensions: HashMap<String, AnyValue>
 }

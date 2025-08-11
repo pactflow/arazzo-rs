@@ -1,9 +1,9 @@
 //! Functions and Traits for loading Arazzo objects from a YAML document
+use std::collections::BTreeMap;
+use std::rc::Rc;
 
 use anyhow::anyhow;
 use serde_json::{json, Map, Value};
-use std::collections::HashMap;
-use std::rc::Rc;
 use maplit::hashmap;
 use yaml_rust2::yaml::Hash;
 use yaml_rust2::Yaml;
@@ -229,7 +229,7 @@ fn yaml_load_failure_actions(hash: &Hash) -> anyhow::Result<Vec<Either<FailureOb
   }
 }
 
-fn yaml_load_outputs(hash: &Hash) -> HashMap<String, String> {
+fn yaml_load_outputs(hash: &Hash) -> BTreeMap<String, String> {
   yaml_hash_lookup(hash, "outputs", |v | {
     if let Some(outputs_hash) = v.as_hash() {
       Some(outputs_hash.iter()
@@ -716,7 +716,7 @@ pub fn yaml_to_json(yaml: &Yaml) -> anyhow::Result<Value> {
 #[cfg(test)]
 mod tests {
   use expectest::prelude::*;
-  use maplit::hashmap;
+  use maplit::{btreemap, hashmap};
   use pretty_assertions::assert_eq;
   use serde_json::{json, Value};
   use std::any::Any;
@@ -1141,7 +1141,7 @@ mod tests {
     hash.insert(Yaml::String("outputs".to_string()), Yaml::Hash(outputs));
 
     let wf = Workflow::try_from(&Yaml::Hash(hash)).unwrap();
-    expect!(wf.outputs).to(be_equal_to(hashmap!{
+    expect!(wf.outputs).to(be_equal_to(btreemap!{
       "tokenExpires".to_string() => "$response.header.X-Expires-After".to_string(),
       "rateLimit".to_string() => "$response.header.X-Rate-Limit".to_string()
     }));
