@@ -1,8 +1,9 @@
 use expectest::prelude::*;
-use itertools::Either;
 use maplit::hashmap;
 use serde_json::{json, Value};
 use yaml_rust2::YamlLoader;
+
+use arazzo_models::either::Either;
 use arazzo_models::extensions::AnyValue;
 use arazzo_models::v1_0::{ArazzoDescription, Criterion, ParameterObject};
 
@@ -215,16 +216,16 @@ fn loads_the_main_spec_descriptors_from_yaml() {
   expect!(step1.operation_path).to(be_none());
   expect!(step1.workflow_id).to(be_none());
   expect!(step1.parameters).to(be_equal_to(vec![
-    Either::Left(ParameterObject {
+    Either::First(ParameterObject {
       name: "username".to_string(),
       r#in: Some("query".to_string()),
-      value: Either::Right("$inputs.username".to_string()),
+      value: Either::Second("$inputs.username".to_string()),
       extensions: Default::default()
     }),
-    Either::Left(ParameterObject {
+    Either::First(ParameterObject {
       name: "password".to_string(),
       r#in: Some("query".to_string()),
-      value: Either::Right("$inputs.password".to_string()),
+      value: Either::Second("$inputs.password".to_string()),
       extensions: Default::default()
     })
   ]));
@@ -249,16 +250,16 @@ fn loads_the_main_spec_descriptors_from_yaml() {
   expect!(step2.operation_path).to(be_some().value("{$sourceDescriptions.petstoreDescription.url}#/paths/~1pet~1findByStatus/get"));
   expect!(step2.workflow_id).to(be_none());
   expect!(step2.parameters).to(be_equal_to(vec![
-    Either::Left(ParameterObject {
+    Either::First(ParameterObject {
       name: "status".to_string(),
       r#in: Some("query".to_string()),
-      value: Either::Left(AnyValue::String("available".to_string())),
+      value: Either::First(AnyValue::String("available".to_string())),
       extensions: Default::default()
     }),
-    Either::Left(ParameterObject {
+    Either::First(ParameterObject {
       name: "Authorization".to_string(),
       r#in: Some("header".to_string()),
-      value: Either::Right("$steps.loginUser.outputs.sessionToken".to_string()),
+      value: Either::Second("$steps.loginUser.outputs.sessionToken".to_string()),
       extensions: Default::default()
     })
   ]));
