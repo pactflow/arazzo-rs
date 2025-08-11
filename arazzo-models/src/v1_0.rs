@@ -3,8 +3,9 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use itertools::Either;
 use serde_json::Value;
+
+use crate::either::Either;
 use serde::Serialize;
 use crate::extensions::AnyValue;
 use crate::payloads::Payload;

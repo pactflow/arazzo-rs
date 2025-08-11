@@ -1,5 +1,12 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.0.6 - Replace Either with local enum
+
+* 9105f52 - refactor: Switch out Intertools::Either for a local enum (Ronald Holshausen, Mon Aug 11 10:21:01 2025 +1000)
+* 399022d - chore: Update docs (Ronald Holshausen, Fri Aug 8 11:39:52 2025 +1000)
+* fb1a7fd - chore: Correct the doc examples (Ronald Holshausen, Fri Aug 8 11:30:34 2025 +1000)
+* 2ba49e6 - bump version to 0.0.6 (Ronald Holshausen, Fri Aug 8 11:26:00 2025 +1000)
+
 # 0.0.5 - Updated docs and added missing PayloadReplacement
 
 * 37841a0 - feat: Added PayloadReplacement (Ronald Holshausen, Fri Aug 8 11:20:15 2025 +1000)

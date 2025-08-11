@@ -4,10 +4,10 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use anyhow::anyhow;
-use itertools::Either;
 use maplit::hashmap;
 use serde_json::{Map, Value};
 
+use crate::either::Either;
 use crate::extensions::{json_extract_extensions, AnyValue};
 use crate::payloads::{EmptyPayload, JsonPayload, Payload, StringPayload};
 use crate::v1_0::{
@@ -187,9 +187,9 @@ fn json_load_parameters(map: &Map<String, Value>) -> anyhow::Result<Vec<Either<P
     for item in array {
       if let Some(map) = item.as_object() {
         if map.contains_key("reference") {
-          list.push(Either::Right(ReusableObject::try_from(item)?));
+          list.push(Either::Second(ReusableObject::try_from(item)?));
         } else {
-          list.push(Either::Left(ParameterObject::try_from(item)?));
+          list.push(Either::First(ParameterObject::try_from(item)?));
         }
       }
     }
@@ -208,9 +208,9 @@ fn json_load_success_actions(map: &Map<String, Value>) -> anyhow::Result<Vec<Eit
       for item in array {
         if let Some(map) = item.as_object() {
           if map.contains_key("reference") {
-            list.push(Either::Right(ReusableObject::try_from(item)?));
+            list.push(Either::Second(ReusableObject::try_from(item)?));
           } else {
-            list.push(Either::Left(SuccessObject::try_from(item)?));
+            list.push(Either::First(SuccessObject::try_from(item)?));
           }
         }
       }
@@ -230,9 +230,9 @@ fn json_load_failure_actions(map: &Map<String, Value>) -> anyhow::Result<Vec<Eit
       for item in array {
         if let Some(map) = item.as_object() {
           if map.contains_key("reference") {
-            list.push(Either::Right(ReusableObject::try_from(item)?));
+            list.push(Either::Second(ReusableObject::try_from(item)?));
           } else {
-            list.push(Either::Left(FailureObject::try_from(item)?));
+            list.push(Either::First(FailureObject::try_from(item)?));
           }
         }
       }
@@ -320,12 +320,12 @@ fn json_load_any_or_expression(map: &Map<String, Value>, key: &str) -> anyhow::R
   if let Some(value) = map.get(key) {
     if let Some(s) = value.as_str() {
       if s.starts_with('$') {
-        Ok(Either::Right(s.to_string()))
+        Ok(Either::Second(s.to_string()))
       } else {
-        Ok(Either::Left(AnyValue::String(s.to_string())))
+        Ok(Either::First(AnyValue::String(s.to_string())))
       }
     } else {
-      AnyValue::try_from(value).map(Either::Left)
+      AnyValue::try_from(value).map(Either::First)
     }
   } else {
     Err(anyhow!("Parameter value is required [4.6.6.1 Fixed Fields]"))
@@ -489,9 +489,9 @@ impl TryFrom<&Value> for CriterionExpressionType {
 fn json_load_criterion_expression_type(json: &Map<String, Value>) -> anyhow::Result<Option<Either<String, CriterionExpressionType>>> {
   json.get("type").map(|value| {
     if let Some(s) = value.as_str() {
-      Ok(Either::Left(s.to_string()))
+      Ok(Either::First(s.to_string()))
     } else {
-      CriterionExpressionType::try_from(value).map(Either::Right)
+      CriterionExpressionType::try_from(value).map(Either::Second)
     }
   }).transpose()
 }
@@ -666,11 +666,11 @@ mod tests {
   use std::any::Any;
 
   use expectest::prelude::*;
-  use itertools::Either;
   use maplit::hashmap;
   use pretty_assertions::assert_eq;
   use serde_json::{json, Value};
 
+  use crate::either::Either;
   use crate::extensions::AnyValue;
   use crate::payloads::{JsonPayload, StringPayload};
   use crate::v1_0::*;
@@ -933,7 +933,7 @@ mod tests {
         "storeId".to_string() => ParameterObject {
           name: "storeId".to_string(),
           r#in: Some("header".to_string()),
-          value: Either::Right("$inputs.x-store-id".to_string()),
+          value: Either::Second("$inputs.x-store-id".to_string()),
           extensions: Default::default()
         }
       },
@@ -1128,10 +1128,10 @@ mod tests {
 
     let wf = Workflow::try_from(&json).unwrap();
     expect!(wf.parameters).to(be_equal_to(vec![
-      Either::Left(ParameterObject {
+      Either::First(ParameterObject {
         name: "username".to_string(),
         r#in: Some("query".to_string()),
-        value: Either::Right("$inputs.username".to_string()),
+        value: Either::Second("$inputs.username".to_string()),
         extensions: Default::default()
       })
     ]));
@@ -1145,7 +1145,7 @@ mod tests {
     expect!(parameter).to(be_equal_to(ParameterObject {
       name: "username".to_string(),
       r#in: None,
-      value: Either::Left(AnyValue::UInteger(10)),
+      value: Either::First(AnyValue::UInteger(10)),
       extensions: Default::default()
     }));
   }
@@ -1181,10 +1181,10 @@ mod tests {
 
     let step = Step::try_from(&json).unwrap();
     expect!(step.parameters).to(be_equal_to(vec![
-      Either::Left(ParameterObject {
+      Either::First(ParameterObject {
         name: "username".to_string(),
         r#in: Some("query".to_string()),
-        value: Either::Right("$inputs.username".to_string()),
+        value: Either::Second("$inputs.username".to_string()),
         extensions: Default::default()
       })
     ]));
@@ -1284,7 +1284,7 @@ mod tests {
     let criterion = Criterion::try_from(&json).unwrap();
     expect!(criterion.condition).to(be_equal_to("^200$"));
     expect!(criterion.context).to(be_some().value("$statusCode"));
-    expect!(criterion.r#type).to(be_some().value(Either::Left("regex".to_string())));
+    expect!(criterion.r#type).to(be_some().value(Either::First("regex".to_string())));
   }
 
   #[test]
@@ -1339,7 +1339,7 @@ mod tests {
 
     let payload_replacement = PayloadReplacement::try_from(&json).unwrap();
     expect!(payload_replacement.target).to(be_equal_to("/petId"));
-    expect!(payload_replacement.value).to(be_equal_to(Either::Right("$inputs.pet_id".to_string())));
+    expect!(payload_replacement.value).to(be_equal_to(Either::Second("$inputs.pet_id".to_string())));
 
     let json = json!({
       "target": "/quantity",
@@ -1348,7 +1348,7 @@ mod tests {
 
     let payload_replacement = PayloadReplacement::try_from(&json).unwrap();
     expect!(payload_replacement.target).to(be_equal_to("/quantity"));
-    expect!(payload_replacement.value).to(be_equal_to(Either::Left(AnyValue::UInteger(10))));
+    expect!(payload_replacement.value).to(be_equal_to(Either::First(AnyValue::UInteger(10))));
   }
 
   #[test]

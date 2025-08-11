@@ -1,7 +1,6 @@
 //! Functions and Traits for loading Arazzo objects from a YAML document
 
 use anyhow::anyhow;
-use itertools::Either;
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -9,9 +8,25 @@ use maplit::hashmap;
 use yaml_rust2::yaml::Hash;
 use yaml_rust2::Yaml;
 
+use crate::either::Either;
 use crate::extensions::{yaml_extract_extensions, AnyValue};
 use crate::payloads::{EmptyPayload, JsonPayload, Payload, StringPayload};
-use crate::v1_0::{ArazzoDescription, Components, Criterion, CriterionExpressionType, FailureObject, Info, ParameterObject, PayloadReplacement, RequestBody, ReusableObject, SourceDescription, Step, SuccessObject, Workflow};
+use crate::v1_0::{
+  ArazzoDescription,
+  Components,
+  Criterion,
+  CriterionExpressionType,
+  FailureObject,
+  Info,
+  ParameterObject,
+  PayloadReplacement,
+  RequestBody,
+  ReusableObject,
+  SourceDescription,
+  Step,
+  SuccessObject,
+  Workflow
+};
 
 impl TryFrom<&Yaml> for ArazzoDescription {
   type Error = anyhow::Error;
@@ -161,9 +176,9 @@ fn yaml_load_parameters(hash: &Hash) -> anyhow::Result<Vec<Either<ParameterObjec
     for item in &array {
       if let Some(hash) = item.as_hash() {
         if hash.contains_key(&Yaml::String("reference".to_string())) {
-          list.push(Either::Right(ReusableObject::try_from(hash)?));
+          list.push(Either::Second(ReusableObject::try_from(hash)?));
         } else {
-          list.push(Either::Left(ParameterObject::try_from(hash)?));
+          list.push(Either::First(ParameterObject::try_from(hash)?));
         }
       }
     }
@@ -181,9 +196,9 @@ fn yaml_load_success_actions(hash: &Hash) -> anyhow::Result<Vec<Either<SuccessOb
     for item in &array {
       if let Some(hash) = item.as_hash() {
         if hash.contains_key(&Yaml::String("reference".to_string())) {
-          list.push(Either::Right(ReusableObject::try_from(hash)?));
+          list.push(Either::Second(ReusableObject::try_from(hash)?));
         } else {
-          list.push(Either::Left(SuccessObject::try_from(hash)?));
+          list.push(Either::First(SuccessObject::try_from(hash)?));
         }
       }
     }
@@ -201,9 +216,9 @@ fn yaml_load_failure_actions(hash: &Hash) -> anyhow::Result<Vec<Either<FailureOb
     for item in &array {
       if let Some(hash) = item.as_hash() {
         if hash.contains_key(&Yaml::String("reference".to_string())) {
-          list.push(Either::Right(ReusableObject::try_from(hash)?));
+          list.push(Either::Second(ReusableObject::try_from(hash)?));
         } else {
-          list.push(Either::Left(FailureObject::try_from(hash)?));
+          list.push(Either::First(FailureObject::try_from(hash)?));
         }
       }
     }
@@ -288,14 +303,14 @@ fn yaml_load_any_or_expression(hash: &Hash, key: &str) -> anyhow::Result<Either<
   yaml_hash_lookup(hash, key, |v | {
     if let Some(s) = v.as_str() {
       if s.starts_with('$') {
-        Some(Either::Right(s.to_string()))
+        Some(Either::Second(s.to_string()))
       } else {
-        Some(Either::Left(AnyValue::String(s.to_string())))
+        Some(Either::First(AnyValue::String(s.to_string())))
       }
     } else {
       AnyValue::try_from(v)
         .ok()
-        .map(Either::Left)
+        .map(Either::First)
     }
   }).ok_or_else(|| anyhow!("Parameter value is required [4.6.6.1 Fixed Fields]"))
 }
@@ -464,9 +479,9 @@ impl TryFrom<&Yaml> for CriterionExpressionType {
 fn yaml_load_criterion_expression_type(hash: &Hash) -> anyhow::Result<Option<Either<String, CriterionExpressionType>>> {
   yaml_hash_lookup(hash, "type", |value | {
     if let Some(s) = value.as_str() {
-      Some(Ok(Either::Left(s.to_string())))
+      Some(Ok(Either::First(s.to_string())))
     } else {
-      Some(CriterionExpressionType::try_from(value).map(Either::Right))
+      Some(CriterionExpressionType::try_from(value).map(Either::Second))
     }
   }).transpose()
 }
@@ -705,11 +720,11 @@ mod tests {
   use pretty_assertions::assert_eq;
   use serde_json::{json, Value};
   use std::any::Any;
-  use itertools::Either;
   use trim_margin::MarginTrimmable;
   use yaml_rust2::yaml::Hash;
   use yaml_rust2::{Yaml, YamlLoader};
 
+  use crate::either::Either;
   use crate::extensions::AnyValue;
   use crate::payloads::{JsonPayload, StringPayload};
   use crate::v1_0::*;
@@ -963,7 +978,7 @@ mod tests {
         "storeId".to_string() => ParameterObject {
           name: "storeId".to_string(),
           r#in: Some("header".to_string()),
-          value: Either::Right("$inputs.x-store-id".to_string()),
+          value: Either::Second("$inputs.x-store-id".to_string()),
           extensions: Default::default()
         }
       },
@@ -1146,10 +1161,10 @@ mod tests {
 
     let wf = Workflow::try_from(&Yaml::Hash(hash)).unwrap();
     expect!(wf.parameters).to(be_equal_to(vec![
-      Either::Left(ParameterObject {
+      Either::First(ParameterObject {
         name: "username".to_string(),
         r#in: Some("query".to_string()),
-        value: Either::Right("$inputs.username".to_string()),
+        value: Either::Second("$inputs.username".to_string()),
         extensions: Default::default()
       })
     ]));
@@ -1162,7 +1177,7 @@ mod tests {
     expect!(parameter).to(be_equal_to(ParameterObject {
       name: "username".to_string(),
       r#in: None,
-      value: Either::Left(AnyValue::Integer(10)),
+      value: Either::First(AnyValue::Integer(10)),
       extensions: Default::default()
     }));
   }
@@ -1195,10 +1210,10 @@ mod tests {
 
     let step = Step::try_from(&Yaml::Hash(hash)).unwrap();
     expect!(step.parameters).to(be_equal_to(vec![
-      Either::Left(ParameterObject {
+      Either::First(ParameterObject {
         name: "username".to_string(),
         r#in: Some("query".to_string()),
-        value: Either::Right("$inputs.username".to_string()),
+        value: Either::Second("$inputs.username".to_string()),
         extensions: Default::default()
       })
     ]));
@@ -1337,7 +1352,7 @@ mod tests {
     let criterion = Criterion::try_from(&Yaml::Hash(hash)).unwrap();
     expect!(criterion.condition).to(be_equal_to("^200$"));
     expect!(criterion.context).to(be_some().value("$statusCode"));
-    expect!(criterion.r#type).to(be_some().value(Either::Left("regex".to_string())));
+    expect!(criterion.r#type).to(be_some().value(Either::First("regex".to_string())));
   }
 
   #[test]
@@ -1388,7 +1403,7 @@ mod tests {
 
     let payload_replacement = PayloadReplacement::try_from(&Yaml::Hash(hash)).unwrap();
     expect!(payload_replacement.target).to(be_equal_to("/petId"));
-    expect!(payload_replacement.value).to(be_equal_to(Either::Right("$inputs.pet_id".to_string())));
+    expect!(payload_replacement.value).to(be_equal_to(Either::Second("$inputs.pet_id".to_string())));
 
     let mut hash = Hash::new();
     hash.insert(Yaml::String("target".to_string()), Yaml::String("/quantity".to_string()));
@@ -1396,7 +1411,7 @@ mod tests {
 
     let payload_replacement = PayloadReplacement::try_from(&Yaml::Hash(hash)).unwrap();
     expect!(payload_replacement.target).to(be_equal_to("/quantity"));
-    expect!(payload_replacement.value).to(be_equal_to(Either::Left(AnyValue::Integer(10))));
+    expect!(payload_replacement.value).to(be_equal_to(Either::First(AnyValue::Integer(10))));
   }
 
   #[test]
