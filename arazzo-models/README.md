@@ -39,11 +39,28 @@ fn main() -> anyhow::Result<()> {
 }
 ```
 
+## Writing models to YAML or JSON
+
+There are implementations of Serde Serialize for all the models (with the `serialize` feature flag enabled),
+so writing to a JSON or YAML document is straight forward. Just follow the Serde documentation.
+
+```rust
+use arazzo_models::v1_0::ArazzoDescription;
+fn main() -> anyhow::Result<()> {
+  let serialized = serde_json::to_string(&ArazzoDescription::default())?;
+  Ok(())
+}
+```
+
+Note that Serde implementations (like JSON and YAML) may sort the keys on writing. So reading in a file
+and then writing it out again will result in changes.
+
 ## Crate features
 All features are enabled by default
 
 * `yaml`: Enables loading the models from a YAML document (uses yaml-rust2 crate)
 * `json`: Enables loading the models from a JSON document (uses serde_json crate)
+* `serialize`: Adds Serde Serialize implementations
 
 ## Note on the Arazzo Specification and Any types
 
