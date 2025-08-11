@@ -60,7 +60,7 @@ pub struct SourceDescription {
 
 /// 4.6.4 Workflow Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#workflow-object)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Workflow {
   /// Unique string to represent the workflow.
   pub workflow_id: String,
@@ -88,7 +88,7 @@ pub struct Workflow {
 
 /// 4.6.5 Step Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#step-object)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Step {
   /// Unique string to represent the step.
   pub step_id: String,

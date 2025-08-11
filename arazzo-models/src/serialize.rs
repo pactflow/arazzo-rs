@@ -1,11 +1,13 @@
 //! Implementations to support serialization of the models using serde
 
+use std::any::Any;
 use std::fmt::Debug;
 use serde::ser::{SerializeMap, SerializeSeq};
 use serde::{Serialize, Serializer};
 
 use crate::either::Either;
 use crate::extensions::AnyValue;
+use crate::payloads::{EmptyPayload, JsonPayload, Payload, StringPayload};
 
 impl Serialize for AnyValue {
   fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -50,6 +52,49 @@ impl <A, B> Serialize for Either<A, B>
       Either::First(a) => a.serialize(serializer),
       Either::Second(b) => b.serialize(serializer)
     }
+  }
+}
+
+impl Serialize for dyn Payload + Send + Sync {
+  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+  where
+    S: Serializer
+  {
+    let payload: &dyn Any = self;
+    if let Some(string_payload) = payload.downcast_ref::<StringPayload>() {
+      string_payload.serialize(serializer)
+    } else if let Some(json_payload) = payload.downcast_ref::<JsonPayload>() {
+      json_payload.serialize(serializer)
+    } else {
+      serializer.serialize_unit()
+    }
+  }
+}
+
+impl Serialize for StringPayload {
+  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+  where
+    S: Serializer
+  {
+    serializer.serialize_str(self.0.as_str())
+  }
+}
+
+impl Serialize for EmptyPayload {
+  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+  where
+    S: Serializer
+  {
+    serializer.serialize_str("")
+  }
+}
+
+impl Serialize for JsonPayload {
+  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+  where
+    S: Serializer
+  {
+    self.0.serialize(serializer)
   }
 }
 
@@ -180,7 +225,6 @@ pub mod v1_0 {
 
   use serde::ser::SerializeMap;
   use serde::{Serialize, Serializer};
-
   use crate::either::Either;
   use crate::v1_0::*;
 
@@ -189,7 +233,63 @@ pub mod v1_0 {
     where
       S: Serializer
     {
-      todo!()
+      let extensions_len = self.extensions.len();
+      let summary_len = if self.summary.is_some() { 1 } else { 0 };
+      let description_len = if self.description.is_some() { 1 } else { 0 };
+      let inputs_len = if self.inputs.is_null() { 0 } else { 1 };
+      let parameters_len = if self.parameters.is_empty() { 0 } else { 1 };
+      let depends_on_len = if self.depends_on.is_empty() { 0 } else { 1 };
+      let success_actions_len = if self.success_actions.is_empty() { 0 } else { 1 };
+      let failure_actions_len = if self.failure_actions.is_empty() { 0 } else { 1 };
+      let outputs_len = if self.outputs.is_empty() { 0 } else { 1 };
+
+      let mut map = serializer.serialize_map(Some(2 + extensions_len +
+        summary_len + description_len + inputs_len + parameters_len + depends_on_len +
+        success_actions_len + failure_actions_len + outputs_len))?;
+
+      if !self.depends_on.is_empty() {
+        map.serialize_entry("dependsOn", &self.depends_on)?;
+      }
+
+      if let Some(value) = &self.description {
+        map.serialize_entry("description", value)?;
+      }
+
+      if !self.failure_actions.is_empty() {
+        map.serialize_entry("failureActions", &self.failure_actions)?;
+      }
+
+      if !self.inputs.is_null() {
+        map.serialize_entry("inputs", &self.inputs)?;
+      }
+
+      if !self.outputs.is_empty() {
+        map.serialize_entry("outputs", &self.outputs)?;
+      }
+
+      if !self.parameters.is_empty() {
+        map.serialize_entry("parameters", &self.parameters)?;
+      }
+
+      map.serialize_entry("steps", &self.steps)?;
+
+      if !self.success_actions.is_empty() {
+        map.serialize_entry("successActions", &self.success_actions)?;
+      }
+
+      if let Some(value) = &self.summary {
+        map.serialize_entry("summary", value)?;
+      }
+
+      map.serialize_entry("workflowId", &self.workflow_id)?;
+
+      let mut extensions = self.extensions.iter().collect::<Vec<_>>();
+      extensions.sort_by(|(a, _), (b, _)| Ord::cmp(a, b));
+      for (k, v) in extensions {
+        map.serialize_entry(k, v)?;
+      }
+
+      map.end()
     }
   }
 
@@ -208,7 +308,7 @@ pub mod v1_0 {
       let success_criteria_len = if self.success_criteria.is_empty() { 0 } else { 1 };
       let on_success_len = if self.on_success.is_empty() { 0 } else { 1 };
       let on_failure_len = if self.on_failure.is_empty() { 0 } else { 1 };
-      let outputs_len = if self.parameters.is_empty() { 0 } else { 1 };
+      let outputs_len = if self.outputs.is_empty() { 0 } else { 1 };
 
       let mut map = serializer.serialize_map(Some(1 + extensions_len +
         operation_id_len + operation_path_len + workflow_id_len + description_len + parameters_len +
@@ -530,14 +630,7 @@ pub mod v1_0 {
     use crate::either::Either;
     use crate::extensions::AnyValue;
     use crate::payloads::{JsonPayload, StringPayload};
-    use crate::v1_0::{
-      Criterion,
-      CriterionExpressionType,
-      ParameterObject,
-      PayloadReplacement,
-      RequestBody,
-      Step
-    };
+    use crate::v1_0::*;
 
     #[test]
     fn request_body() {
@@ -931,6 +1024,110 @@ pub mod v1_0 {
       let yaml = serde_yaml::to_string(&step).unwrap();
       assert_eq!(
         r#"|stepId: test-extensions
+           |x-one: one
+           |x-two: 2
+           |"#.trim_margin().as_ref().unwrap(), yaml.as_str());
+    }
+
+    #[test]
+    fn workflow() {
+      let workflow = Workflow {
+        workflow_id: "test".to_string(),
+        summary: None,
+        description: None,
+        inputs: Default::default(),
+        depends_on: vec![],
+        steps: vec![],
+        success_actions: vec![],
+        failure_actions: vec![],
+        outputs: Default::default(),
+        parameters: vec![],
+        extensions: Default::default()
+      };
+      let json = serde_json::to_string(&workflow).unwrap();
+      assert_eq!(json!({
+        "steps": [],
+        "workflowId": "test"
+      }).to_string(), json);
+      let yaml = serde_yaml::to_string(&workflow).unwrap();
+      assert_eq!(
+        r#"|steps: []
+           |workflowId: test
+           |"#.trim_margin().as_ref().unwrap(), yaml.as_str());
+
+      let workflow = Workflow {
+        workflow_id: "loginUser".to_string(),
+        summary: Some("Login User".to_string()),
+        description: Some("This workflow lays out the steps to login a user".to_string()),
+        inputs: json!({
+          "type": "object",
+          "properties": {
+            "username": {
+              "type": "string"
+            },
+            "password": {
+              "type": "string"
+            }
+          }
+        }),
+        steps: vec![
+          Step {
+            step_id: "loginStep".to_string(),
+            .. Step::default()
+          }
+        ],
+        outputs: btreemap!{
+          "tokenExpires".to_string() => "$steps.loginStep.outputs.tokenExpires".to_string()
+        },
+        extensions: hashmap!{
+          "x-one".to_string() => AnyValue::String("one".to_string()),
+          "x-two".to_string() => AnyValue::Integer(2),
+        },
+        .. Workflow::default()
+      };
+      let json = serde_json::to_string(&workflow).unwrap();
+      assert_eq!(json!({
+        "description": "This workflow lays out the steps to login a user",
+        "inputs": {
+          "properties": {
+            "password": {
+              "type": "string"
+            },
+            "username": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "outputs": {
+          "tokenExpires": "$steps.loginStep.outputs.tokenExpires"
+        },
+        "steps": [
+          {
+            "stepId": "loginStep"
+          }
+        ],
+        "summary": "Login User",
+        "workflowId": "loginUser",
+        "x-one": "one",
+        "x-two": 2
+      }).to_string(), json);
+      let yaml = serde_yaml::to_string(&workflow).unwrap();
+      assert_eq!(
+        r#"|description: This workflow lays out the steps to login a user
+           |inputs:
+           |  properties:
+           |    password:
+           |      type: string
+           |    username:
+           |      type: string
+           |  type: object
+           |outputs:
+           |  tokenExpires: $steps.loginStep.outputs.tokenExpires
+           |steps:
+           |- stepId: loginStep
+           |summary: Login User
+           |workflowId: loginUser
            |x-one: one
            |x-two: 2
            |"#.trim_margin().as_ref().unwrap(), yaml.as_str());
