@@ -1,5 +1,21 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.1.0 - Support serialisation of models using Serde
+
+* f560ad5 - chore: Bump minor version (Ronald Holshausen, Mon Aug 11 15:12:39 2025 +1000)
+* b9064c9 - chore: Update docs with details on serialisation (Ronald Holshausen, Mon Aug 11 15:01:09 2025 +1000)
+* 0f45503 - feat: Completed serialization to JSON and YAML (Ronald Holshausen, Mon Aug 11 14:48:44 2025 +1000)
+* c052333 - feat: Added Serialize for Workflow (Ronald Holshausen, Mon Aug 11 12:15:11 2025 +1000)
+* d9af9f0 - refactor: Move Serialize implementations behind a feature flag (Ronald Holshausen, Mon Aug 11 11:41:29 2025 +1000)
+* 9525dc9 - feat: Added Serialize for Step (Ronald Holshausen, Mon Aug 11 11:06:22 2025 +1000)
+* e1d870e - Merge branch 'main' into serialize-impl (Ronald Holshausen, Mon Aug 11 10:29:03 2025 +1000)
+* 8d65639 - bump version to 0.0.7 (Ronald Holshausen, Mon Aug 11 10:24:06 2025 +1000)
+* 4ff3d18 - chore: Added Serialize  for ParameterObject (Ronald Holshausen, Fri Aug 8 15:53:06 2025 +1000)
+* 4349234 - feat: Added Serialize for Criterion (Ronald Holshausen, Fri Aug 8 15:30:56 2025 +1000)
+* 219e937 - feat: Implemented Serialize for Payload, PayloadReplacement and RequestBody (Ronald Holshausen, Fri Aug 8 14:58:27 2025 +1000)
+* 2aacecf - Merge branch 'main' into serialize-impl (Ronald Holshausen, Fri Aug 8 11:41:42 2025 +1000)
+* 023e34f - feat: Add initial implementation of Serde Serialize (Ronald Holshausen, Fri Aug 8 10:33:23 2025 +1000)
+
 # 0.0.6 - Replace Either with local enum
 
 * 9105f52 - refactor: Switch out Intertools::Either for a local enum (Ronald Holshausen, Mon Aug 11 10:21:01 2025 +1000)
