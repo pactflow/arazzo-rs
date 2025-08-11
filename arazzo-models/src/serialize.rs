@@ -182,14 +182,7 @@ pub mod v1_0 {
   use serde::{Serialize, Serializer};
 
   use crate::either::Either;
-  use crate::v1_0::{
-    Criterion,
-    ParameterObject,
-    PayloadReplacement,
-    RequestBody,
-    Step,
-    Workflow
-  };
+  use crate::v1_0::*;
 
   impl Serialize for Workflow {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -382,6 +375,136 @@ pub mod v1_0 {
       match &self.value {
         Either::First(any) => map.serialize_entry("value", any)?,
         Either::Second(exp) => map.serialize_entry("value", exp)?
+      }
+
+      let mut extensions = self.extensions.iter().collect::<Vec<_>>();
+      extensions.sort_by(|(a, _), (b, _)| Ord::cmp(a, b));
+      for (k, v) in extensions {
+        map.serialize_entry(k, v)?;
+      }
+
+      map.end()
+    }
+  }
+
+  impl Serialize for CriterionExpressionType {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+      S: Serializer
+    {
+      let extensions_len = self.extensions.len();
+
+      let mut map = serializer.serialize_map(Some(extensions_len + 2))?;
+
+      map.serialize_entry("type", &self.r#type)?;
+      map.serialize_entry("version", &self.version)?;
+
+      let mut extensions = self.extensions.iter().collect::<Vec<_>>();
+      extensions.sort_by(|(a, _), (b, _)| Ord::cmp(a, b));
+      for (k, v) in extensions {
+        map.serialize_entry(k, v)?;
+      }
+
+      map.end()
+    }
+  }
+
+  impl Serialize for ReusableObject {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+      S: Serializer
+    {
+      if let Some(value) = &self.value {
+        let mut map = serializer.serialize_map(Some(2))?;
+
+        map.serialize_entry("reference", &self.reference)?;
+        map.serialize_entry("value", value)?;
+
+        map.end()
+      } else {
+        let mut map = serializer.serialize_map(Some(1))?;
+
+        map.serialize_entry("reference", &self.reference)?;
+
+        map.end()
+      }
+    }
+  }
+
+  impl Serialize for SuccessObject {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+      S: Serializer
+    {
+      let extensions_len = self.extensions.len();
+      let workflow_id_len = if self.workflow_id.is_some() { 1 } else { 0 };
+      let step_id_len = if self.step_id.is_some() { 1 } else { 0 };
+      let criteria_len = if self.criteria.is_empty() { 0 } else { 1 };
+
+      let mut map = serializer.serialize_map(Some(2 + extensions_len +
+        workflow_id_len + step_id_len + criteria_len))?;
+
+      map.serialize_entry("name", &self.name)?;
+      map.serialize_entry("type", &self.r#type)?;
+
+      if let Some(value) = &self.workflow_id {
+        map.serialize_entry("workflowId", value)?;
+      }
+
+      if let Some(value) = &self.step_id {
+        map.serialize_entry("stepId", value)?;
+      }
+
+      if !self.criteria.is_empty() {
+        map.serialize_entry("criteria", &self.criteria)?;
+      }
+
+      let mut extensions = self.extensions.iter().collect::<Vec<_>>();
+      extensions.sort_by(|(a, _), (b, _)| Ord::cmp(a, b));
+      for (k, v) in extensions {
+        map.serialize_entry(k, v)?;
+      }
+
+      map.end()
+    }
+  }
+
+  impl Serialize for FailureObject {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+      S: Serializer
+    {
+      let extensions_len = self.extensions.len();
+      let workflow_id_len = if self.workflow_id.is_some() { 1 } else { 0 };
+      let step_id_len = if self.step_id.is_some() { 1 } else { 0 };
+      let criteria_len = if self.criteria.is_empty() { 0 } else { 1 };
+      let retry_after_len = if self.retry_after.is_some() { 1 } else { 0 };
+      let retry_limit_len = if self.retry_limit.is_some() { 1 } else { 0 };
+
+      let mut map = serializer.serialize_map(Some(2 + extensions_len +
+        workflow_id_len + step_id_len + criteria_len + retry_after_len + retry_limit_len))?;
+
+      map.serialize_entry("name", &self.name)?;
+      map.serialize_entry("type", &self.r#type)?;
+
+      if let Some(value) = &self.workflow_id {
+        map.serialize_entry("workflowId", value)?;
+      }
+
+      if let Some(value) = &self.step_id {
+        map.serialize_entry("stepId", value)?;
+      }
+
+      if !self.criteria.is_empty() {
+        map.serialize_entry("criteria", &self.criteria)?;
+      }
+
+      if let Some(value) = &self.retry_after {
+        map.serialize_entry("retryAfter", value)?;
+      }
+
+      if let Some(value) = &self.retry_limit {
+        map.serialize_entry("retryLimit", value)?;
       }
 
       let mut extensions = self.extensions.iter().collect::<Vec<_>>();

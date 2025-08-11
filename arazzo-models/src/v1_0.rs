@@ -6,14 +6,13 @@ use std::rc::Rc;
 use serde_json::Value;
 
 use crate::either::Either;
-use serde::Serialize;
 use crate::extensions::AnyValue;
 use crate::payloads::Payload;
 
 
 /// 4.6.1 Arazzo Description is the root object of the loaded specification.
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#arazzo-description)
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ArazzoDescription {
   /// Version number of the Arazzo Specification
   pub arazzo: String,
@@ -31,7 +30,7 @@ pub struct ArazzoDescription {
 
 /// 4.6.2 Info Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#info-object)
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Info {
   /// A human-readable title of the Arazzo Description.
   pub title: String,
@@ -47,7 +46,7 @@ pub struct Info {
 
 /// 4.6.3 Source Description Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#source-description-object)
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SourceDescription {
   /// Unique name for the source description.
   pub name: String,
@@ -135,8 +134,7 @@ pub struct ParameterObject {
 
 /// 4.6.7 Success Action Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#success-action-object)
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SuccessObject {
   /// The name of the success action.
   pub name: String,
@@ -150,14 +148,12 @@ pub struct SuccessObject {
   /// List of assertions to determine if this action shall be executed.
   pub criteria: Vec<Criterion>,
   /// Extension values
-  #[serde(flatten)]
   pub extensions: HashMap<String, AnyValue>
 }
 
 /// 4.6.8 Failure Action Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#failure-action-object)
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FailureObject {
   /// The name of the success action.
   pub name: String,
@@ -177,13 +173,12 @@ pub struct FailureObject {
   /// List of assertions to determine if this action shall be executed.
   pub criteria: Vec<Criterion>,
   /// Extension values
-  #[serde(flatten)]
   pub extensions: HashMap<String, AnyValue>
 }
 
 /// 4.6.9 Components Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#components-object)
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Components {
   /// Object to hold reusable JSON Schema objects to be referenced from workflow inputs.
   pub inputs: HashMap<String, Value>,
@@ -194,13 +189,12 @@ pub struct Components {
   /// Object to hold reusable Failure Actions Objects.
   pub failure_actions: HashMap<String, FailureObject>,
   /// Extension values
-  #[serde(flatten)]
   pub extensions: HashMap<String, AnyValue>
 }
 
 /// 4.6.10 Reusable Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#reusable-object)
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ReusableObject {
   /// Runtime Expression used to reference the desired object.
   pub reference: String,
@@ -224,14 +218,13 @@ pub struct Criterion {
 
 /// 4.6.12 Criterion Expression Type Object
 /// [Reference](https://spec.openapis.org/arazzo/v1.0.1.html#criterion-expression-type-object)
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CriterionExpressionType {
   /// The type of condition to be applied.
   pub r#type: String,
   /// A shorthand string representing the version of the expression type being used.
   pub version: String,
   /// Extension values
-  #[serde(flatten)]
   pub extensions: HashMap<String, AnyValue>
 }
 

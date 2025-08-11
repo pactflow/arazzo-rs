@@ -1,5 +1,5 @@
 use expectest::prelude::*;
-use maplit::{btreemap, hashmap};
+use maplit::btreemap;
 use serde_json::{json, Value};
 use yaml_rust2::YamlLoader;
 

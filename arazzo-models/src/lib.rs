@@ -43,6 +43,7 @@
 //!
 //! * `yaml`: Enables loading the models from a YAML document (uses yaml-rust2 crate)
 //! * `json`: Enables loading the models from a JSON document (uses serde_json crate)
+//! * `serialize`: Adds Serde Serialize implementations
 //!
 //! ## Note on the Arazzo Specification and Any types
 //!
@@ -56,6 +57,6 @@ pub mod v1_0;
 pub mod extensions;
 pub mod payloads;
 pub mod either;
-pub mod serialize;
+#[cfg(feature = "serialize")] pub mod serialize;
 #[cfg(feature = "json")] pub mod json;
 #[cfg(feature = "yaml")] pub mod yaml;
